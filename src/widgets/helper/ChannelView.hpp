@@ -46,6 +46,7 @@ using MessageElementFlags = FlagsEnum<MessageElementFlag>;
 
 class Scrollbar;
 class LabelButton;
+class ModDragSlider;
 struct Link;
 class MessageLayoutElement;
 class Split;
@@ -474,6 +475,14 @@ private:
     void scrollUpdateRequested();
 
     TooltipWidget *const tooltipWidget_{};
+
+    /// Drag-to-moderate handle shown on hovered messages when the user has
+    /// mod rights in the message's channel
+    ModDragSlider *modSlider_ = nullptr;
+
+    /// Shows/hides and positions @a modSlider_ for the hovered message
+    void updateModSlider(const std::shared_ptr<MessageLayout> &layout,
+                         const QPointF &eventPos, const QPointF &relativePos);
 
     /// Pointer to a link info that hasn't loaded yet
     QPointer<LinkInfo> pendingLinkInfo_;

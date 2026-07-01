@@ -46,6 +46,7 @@
 #include "widgets/dialogs/ReplyThreadPopup.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/dialogs/UserInfoPopup.hpp"
+#include "widgets/helper/ModDragSlider.hpp"
 #include "widgets/helper/ScrollbarHighlight.hpp"
 #include "widgets/helper/SearchPopup.hpp"
 #include "widgets/Notebook.hpp"
@@ -324,6 +325,8 @@ ChannelView::ChannelView(InternalCtor /*tag*/, QWidget *parent, Split *split,
 {
     this->setMouseTracking(true);
 
+    this->modSlider_ = new ModDragSlider(this);
+
     this->initializeLayout();
     this->initializeScrollbar();
     this->initializeSignals();
@@ -404,6 +407,7 @@ void ChannelView::initializeScrollbar()
     // We can safely ignore the scroll bar's signal connection since the scroll bar will
     // always be destroyed before the ChannelView
     std::ignore = this->scrollBar_->getCurrentValueChanged().connect([this] {
+        this->modSlider_->hideIfIdle();
         if (this->isVisible())
         {
             this->performLayout(true);
@@ -1814,7 +1818,23 @@ void ChannelView::drawMessages(QPainter &painter, const QRect &area)
             areaContainsY(ctx.y + layout->getHeight()) ||
             (ctx.y < area.y() && layout->getHeight() > area.height()))
         {
+            // While drag-to-moderate is active, the dragged message slides
+            // right with the handle, revealing the action bar behind it.
+            const bool modDragged =
+                this->modSlider_->isDragging() &&
+                !layout->getMessagePtr()->id.isEmpty() &&
+                layout->getMessagePtr()->id ==
+                    this->modSlider_->draggedMessageId();
+            if (modDragged)
+            {
+                painter.save();
+                painter.translate(this->modSlider_->dragOffset(), 0);
+            }
             auto paintResult = layout->paint(ctx);
+            if (modDragged)
+            {
+                painter.restore();
+            }
             if (paintResult.hasAnimatedElements)
             {
                 if (animationArea.isNull())
@@ -1923,6 +1943,9 @@ void ChannelView::wheelEvent(QWheelEvent *event)
         // Ignore any scrolls where no vertical scrolling has taken place
         return;
     }
+
+    // The message under the cursor is about to change
+    this->modSlider_->hideIfIdle();
 
     if (event->modifiers().testFlag(Qt::ControlModifier))
     {
@@ -2050,6 +2073,13 @@ void ChannelView::leaveEvent(QEvent * /*event*/)
 {
     this->tooltipWidget_->hide();
 
+    // Entering the mod slider (a child widget) also triggers leaveEvent;
+    // don't hide it while the cursor is on it.
+    if (!this->modSlider_->underMouse())
+    {
+        this->modSlider_->hideIfIdle();
+    }
+
     this->unpause(PauseReason::Mouse);
 }
 
@@ -2139,6 +2169,7 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
     {
         this->setCursor(Qt::ArrowCursor);
         this->tooltipWidget_->hide();
+        this->modSlider_->hideIfIdle();
         return;
     }
 
@@ -2146,6 +2177,8 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
     {
         this->currentMousePosition_ = event->globalPosition();
     }
+
+    this->updateModSlider(layout, event->pos(), relativePos);
 
     // check for word underneath cursor
     const MessageLayoutElement *hoverLayoutElement =
@@ -2351,6 +2384,40 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
     {
         this->setCursor(Qt::ArrowCursor);
     }
+}
+
+void ChannelView::updateModSlider(const std::shared_ptr<MessageLayout> &layout,
+                                  const QPointF &eventPos,
+                                  const QPointF &relativePos)
+{
+    if (this->modSlider_->isDragging())
+    {
+        return;
+    }
+
+    // Don't pop up while selecting text
+    if (this->isLeftMouseDown_ || this->isDoubleClick_)
+    {
+        this->modSlider_->hideIfIdle();
+        return;
+    }
+
+    const auto &message = layout->getMessagePtr();
+    auto channel = this->inferChannel(*message);
+
+    bool eligible = channel != nullptr && channel->hasModRights() &&
+                    !message->id.isEmpty() && !message->loginName.isEmpty() &&
+                    !message->flags.has(MessageFlag::Disabled);
+    if (!eligible)
+    {
+        this->modSlider_->hideIfIdle();
+        return;
+    }
+
+    auto rowTop = static_cast<int>(eventPos.y() - relativePos.y());
+    this->modSlider_->showFor(
+        channel, message,
+        QRect(0, rowTop, this->width(), layout->getHeight()));
 }
 
 void ChannelView::mousePressEvent(QMouseEvent *event)

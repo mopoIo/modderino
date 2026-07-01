@@ -838,6 +838,8 @@ set(SOURCE_FILES
         widgets/helper/MessageView.hpp
         widgets/helper/MicroNotebook.cpp
         widgets/helper/MicroNotebook.hpp
+        widgets/helper/ModDragSlider.cpp
+        widgets/helper/ModDragSlider.hpp
         widgets/helper/NotebookTab.cpp
         widgets/helper/NotebookTab.hpp
         widgets/helper/OverlayInteraction.cpp
