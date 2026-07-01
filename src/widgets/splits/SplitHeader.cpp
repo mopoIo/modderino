@@ -97,7 +97,7 @@ auto formatRoomModeUnclean(const TwitchChannel::RoomModes &modes) -> QString
     return text;
 }
 
-QString formatRoomModeUnclean(const KickChannel::RoomModes &modes)
+TwitchChannel::RoomModes toTwitchRoomModes(const KickChannel::RoomModes &modes)
 {
     TwitchChannel::RoomModes twitch{
         .submode = modes.subscribersMode,
@@ -115,7 +115,65 @@ QString formatRoomModeUnclean(const KickChannel::RoomModes &modes)
     {
         twitch.slowMode = static_cast<int>(modes.slowModeDuration->count());
     }
-    return formatRoomModeUnclean(twitch);
+    return twitch;
+}
+
+/// Formats the active room modes as a rich-text row of small icons: a clock
+/// with the duration for slow mode, the emote-menu smiley for emote-only, a
+/// star for sub-only and a user icon (plus duration) for follower-only.
+/// Any accompanying text is rendered small and grey.
+auto formatRoomModeHtml(const TwitchChannel::RoomModes &modes,
+                        bool hasModRights) -> QString
+{
+    const auto icon = [](const QString &path) {
+        return QStringLiteral(
+                   "<img src='%1' width='12' height='12' "
+                   "style='vertical-align: middle;'/>")
+            .arg(path);
+    };
+    const auto grey = [](const QString &text) {
+        return QStringLiteral("<span style='color:#a3a3a3;'>"
+                              "<small>%1</small></span>")
+            .arg(text);
+    };
+
+    QStringList parts;
+
+    if (modes.r9k)
+    {
+        parts.append(grey(QStringLiteral("r9k")));
+    }
+    if (modes.slowMode > 0)
+    {
+        parts.append(icon(":/buttons/clock.svg") + QStringLiteral("&nbsp;") +
+                     grey(localizeNumbers(modes.slowMode)));
+    }
+    if (modes.emoteOnly)
+    {
+        parts.append(icon(":/buttons/emoteGrey.svg"));
+    }
+    if (modes.submode)
+    {
+        parts.append(icon(":/buttons/star.svg"));
+    }
+    if (modes.followerOnly != -1)
+    {
+        auto part = icon(":/buttons/account-darkMode.svg");
+        if (modes.followerOnly != 0)
+        {
+            part += QStringLiteral("&nbsp;") +
+                    grey(formatDurationExact(
+                        std::chrono::minutes{modes.followerOnly}));
+        }
+        parts.append(part);
+    }
+
+    if (parts.isEmpty() && hasModRights)
+    {
+        parts.append(grey(QStringLiteral("none")));
+    }
+
+    return parts.join(QStringLiteral("&nbsp;"));
 }
 
 void cleanRoomModeText(QString &text, bool hasModRights)
@@ -125,16 +183,8 @@ void cleanRoomModeText(QString &text, bool hasModRights)
         text = text.mid(0, text.size() - 2);
     }
 
-    if (!text.isEmpty())
-    {
-        static QRegularExpression commaReplacement("^(.+?, .+?,) (.+)$");
-
-        auto match = commaReplacement.match(text);
-        if (match.hasMatch())
-        {
-            text = match.captured(1) + '\n' + match.captured(2);
-        }
-    }
+    // Keep the mode indicator on a single line; a second line overflows the
+    // fixed-height header and gets clipped.
 
     if (text.isEmpty() && hasModRights)
     {
@@ -381,6 +431,8 @@ void SplitHeader::initializeLayout()
                              QSizePolicy::Preferred);
             w->setCentered(true);
             w->setPadding(QMargins{});
+            // Elide with "…" when there isn't enough room instead of clipping
+            w->setShouldElide(true);
         }),
         // space
         makeWidget<BaseWidget>([](auto w) {
@@ -389,6 +441,11 @@ void SplitHeader::initializeLayout()
         // mode
         this->modeButton_ = makeWidget<LabelButton>([&](auto w) {
             w->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+            // Truncate on the right when squeezed instead of clipping on
+            // both sides.
+            w->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            // The room modes are shown as small inline icons
+            w->enableRichText();
             w->hide();
             w->setMenu(this->createChatModeMenu());
         }),
@@ -838,10 +895,13 @@ void SplitHeader::updateRoomModes()
     {
         this->modeButton_->setEnabled(twitchChannel->hasModRights());
 
-        QString text;
+        QString html;
+        QString tooltip;
         {
             auto roomModes = twitchChannel->accessRoomModes();
-            text = formatRoomModeUnclean(*roomModes);
+            html = formatRoomModeHtml(*roomModes,
+                                      twitchChannel->hasModRights());
+            tooltip = formatRoomModeUnclean(*roomModes);
 
             // Set menu action
             this->modeActionSetR9k->setChecked(roomModes->r9k);
@@ -851,13 +911,14 @@ void SplitHeader::updateRoomModes()
             this->modeActionSetFollowers->setChecked(roomModes->followerOnly !=
                                                      -1);
         }
-        cleanRoomModeText(text, twitchChannel->hasModRights());
+        cleanRoomModeText(tooltip, twitchChannel->hasModRights());
 
         // set the label text
 
-        if (!text.isEmpty())
+        if (!html.isEmpty())
         {
-            this->modeButton_->setText(text);
+            this->modeButton_->setText(html);
+            this->modeButton_->setToolTip(tooltip);
             this->modeButton_->show();
         }
         else
@@ -871,12 +932,15 @@ void SplitHeader::updateRoomModes()
     {
         this->modeButton_->setEnabled(false);
 
-        QString text = formatRoomModeUnclean(kc->roomModes());
-        cleanRoomModeText(text, false);
+        auto modes = toTwitchRoomModes(kc->roomModes());
+        QString html = formatRoomModeHtml(modes, false);
+        QString tooltip = formatRoomModeUnclean(modes);
+        cleanRoomModeText(tooltip, false);
 
-        if (!text.isEmpty())
+        if (!html.isEmpty())
         {
-            this->modeButton_->setText(text);
+            this->modeButton_->setText(html);
+            this->modeButton_->setToolTip(tooltip);
             this->modeButton_->show();
         }
         else

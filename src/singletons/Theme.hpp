@@ -178,10 +178,11 @@ public:
 
     pajlada::Signals::NoArgSignal updated;
 
-    QStringSetting themeName{"/appearance/theme/name", "Dark"};
+    QStringSetting themeName{"/appearance/theme/name", "Modderino"};
     QStringSetting lightSystemThemeName{"/appearance/theme/lightSystem",
                                         "Light"};
-    QStringSetting darkSystemThemeName{"/appearance/theme/darkSystem", "Dark"};
+    QStringSetting darkSystemThemeName{"/appearance/theme/darkSystem",
+                                       "Modderino"};
 
 private:
     bool isLight_ = false;

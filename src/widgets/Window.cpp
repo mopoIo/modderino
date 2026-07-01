@@ -234,6 +234,8 @@ void Window::addCustomTitlebarButtons()
                 this->userLabel_->rect().bottomLeft()));
     });
     this->userLabel_->setMinimumWidth(20 * this->scale());
+    // Truncate on the right when squeezed instead of clipping on both sides
+    this->userLabel_->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     // streamer mode
     this->streamerModeTitlebarIcon_ =
@@ -787,7 +789,7 @@ void Window::onAccountSelected()
     auto user = getApp()->getAccounts()->twitch.getCurrent();
 
     // update title (also append username on Linux and MacOS)
-    QString windowTitle = Version::instance().fullVersion();
+    QString windowTitle = "Modderino 1.0";
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
     if (user->isAnon())
@@ -810,14 +812,16 @@ void Window::onAccountSelected()
     // update user
     if (this->userLabel_)
     {
-        if (user->isAnon())
-        {
-            this->userLabel_->setText("anonymous");
-        }
-        else
-        {
-            this->userLabel_->setText(user->getUserName());
-        }
+        QString name =
+            user->isAnon() ? QStringLiteral("anonymous") : user->getUserName();
+        this->userLabel_->setText(name);
+
+        // Reserve enough room for the full name; otherwise the layout may
+        // compress the label and clip the centered text on both sides.
+        auto textWidth =
+            this->userLabel_->fontMetrics().horizontalAdvance(name);
+        this->userLabel_->setMinimumWidth(textWidth +
+                                          static_cast<int>(16 * this->scale()));
     }
 }
 

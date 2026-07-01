@@ -46,6 +46,11 @@ void LabelButton::enableRichText()
     this->label_.setTextFormat(Qt::RichText);
 }
 
+void LabelButton::setLabelAlignment(Qt::Alignment alignment)
+{
+    this->label_.setAlignment(alignment);
+}
+
 void LabelButton::paintContent(QPainter &painter)
 {
 }

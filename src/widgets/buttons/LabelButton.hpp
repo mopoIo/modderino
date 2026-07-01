@@ -45,6 +45,12 @@ public:
     /// Sets the label to display rich text (Qt's HTML subset)
     void enableRichText();
 
+    /// @brief Sets the label's alignment.
+    ///
+    /// By default the label is centered. Left-aligned labels clip on the
+    /// right when there isn't enough room, instead of on both sides.
+    void setLabelAlignment(Qt::Alignment alignment);
+
 protected:
     void paintContent(QPainter &painter) override;
 

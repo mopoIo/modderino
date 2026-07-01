@@ -281,6 +281,11 @@ namespace chatterino {
 
 const std::vector<ThemeDescriptor> Theme::builtInThemes{
     {
+        .key = "Modderino",
+        .path = ":/themes/Modderino.json",
+        .name = "Modderino",
+    },
+    {
         .key = "White",
         .path = ":/themes/White.json",
         .name = "White",
@@ -303,7 +308,7 @@ const std::vector<ThemeDescriptor> Theme::builtInThemes{
 };
 
 // Dark is our default & fallback theme
-const ThemeDescriptor Theme::fallbackTheme = Theme::builtInThemes.at(2);
+const ThemeDescriptor Theme::fallbackTheme = Theme::builtInThemes.at(3);
 
 bool Theme::isLightTheme() const
 {
