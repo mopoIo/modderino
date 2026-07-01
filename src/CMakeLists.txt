@@ -331,6 +331,8 @@ set(SOURCE_FILES
 
         messages/Emote.cpp
         messages/Emote.hpp
+        messages/EmoteResolver.cpp
+        messages/EmoteResolver.hpp
         messages/Image.cpp
         messages/Image.hpp
         messages/ImageSet.cpp
@@ -822,6 +824,8 @@ set(SOURCE_FILES
         widgets/helper/DebugPopup.hpp
         widgets/helper/EditableModelView.cpp
         widgets/helper/EditableModelView.hpp
+        widgets/helper/EmoteInputLineEdit.cpp
+        widgets/helper/EmoteInputLineEdit.hpp
         widgets/helper/FontSettingWidget.cpp
         widgets/helper/FontSettingWidget.hpp
         widgets/helper/IconDelegate.cpp

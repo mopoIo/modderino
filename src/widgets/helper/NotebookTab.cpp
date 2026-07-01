@@ -7,9 +7,11 @@
 #include "Application.hpp"
 #include "common/Channel.hpp"
 #include "common/Common.hpp"
+#include "widgets/helper/EmoteInputLineEdit.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "messages/EmoteResolver.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
@@ -33,6 +35,8 @@
 #include <QLineEdit>
 #include <QMimeData>
 #include <QPainter>
+#include <QPointer>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -344,17 +348,20 @@ void NotebookTab::recreateCloseMultipleTabsMenu(
 
 void NotebookTab::showRenameDialog()
 {
+    // The dialog is shown non-modally so the emote picker & completion popups
+    // (separate windows) aren't blocked by an application-modal dialog.
     auto *dialog = new QDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
 
     auto *vbox = new QVBoxLayout;
 
-    auto *lineEdit = new QLineEdit;
-    lineEdit->setText(this->getCustomTitle());
-    lineEdit->setPlaceholderText(this->getDefaultTitle());
-    lineEdit->selectAll();
+    auto *input = new EmoteInputLineEdit(this->channelForEmotes(), dialog);
+    input->setText(this->getCustomTitle());
+    input->setPlaceholderText(this->getDefaultTitle());
+    input->selectAll();
 
     vbox->addWidget(new QLabel("Name:"));
-    vbox->addWidget(lineEdit);
+    vbox->addWidget(input);
     vbox->addStretch(1);
 
     auto *buttonBox =
@@ -363,15 +370,21 @@ void NotebookTab::showRenameDialog()
     vbox->addWidget(buttonBox);
     dialog->setLayout(vbox);
 
-    QObject::connect(buttonBox, &QDialogButtonBox::accepted, [dialog] {
-        dialog->accept();
+    QPointer<NotebookTab> self(this);
+    auto accept = [self, dialog, input] {
+        if (self)
+        {
+            self->setCustomTitle(input->text());
+        }
         dialog->close();
-    });
+    };
 
-    QObject::connect(buttonBox, &QDialogButtonBox::rejected, [dialog] {
-        dialog->reject();
+    QObject::connect(buttonBox, &QDialogButtonBox::accepted, dialog, accept);
+    QObject::connect(buttonBox, &QDialogButtonBox::rejected, dialog, [dialog] {
         dialog->close();
     });
+    QObject::connect(input->lineEdit(), &QLineEdit::returnPressed, dialog,
+                     accept);
 
     dialog->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     dialog->setMinimumSize(dialog->minimumSizeHint().width() + 50,
@@ -383,11 +396,25 @@ void NotebookTab::showRenameDialog()
 
     dialog->setWindowTitle("Rename Tab");
 
-    if (dialog->exec() == QDialog::Accepted)
+    dialog->show();
+    input->setFocus();
+}
+
+ChannelPtr NotebookTab::channelForEmotes() const
+{
+    if (auto *container = dynamic_cast<SplitContainer *>(this->page))
     {
-        QString newTitle = lineEdit->text();
-        this->setCustomTitle(newTitle);
+        if (auto *split = container->getSelectedSplit())
+        {
+            return split->getChannel();
+        }
+        auto splits = container->getSplits();
+        if (!splits.empty())
+        {
+            return splits.front()->getChannel();
+        }
     }
+    return Channel::getEmpty();
 }
 
 void NotebookTab::themeChangedEvent()
@@ -425,7 +452,8 @@ int NotebookTab::normalTabWidthForHeight(int height) const
         getApp()->getFonts()->getFontMetrics(FontStyle::UiTabs, scale);
 
     float compactDivider = getCompactDivider(getSettings()->tabStyle);
-    qreal titleWidth = emojiTextWidth(metrics, this->getTitle());
+    qreal titleWidth = emojiTextWidth(
+        metrics, parseEmotesAndEmojis(this->getTitle(), this->channelForEmotes()));
     if (this->hasXButton())
     {
         width =
@@ -1004,19 +1032,33 @@ void NotebookTab::paintEvent(QPaintEvent *)
         textRect.setRight(textRect.right() - this->height() / 2);
     }
 
-    auto emojiRuns = parseEmojiText(this->getTitle());
-    bool hasEmoji = emojiTextRunsHaveEmoji(emojiRuns);
-    qreal width = hasEmoji ? emojiTextWidth(metrics, emojiRuns)
-                           : metrics.horizontalAdvance(this->getTitle());
+    auto titleRuns =
+        parseEmotesAndEmojis(this->getTitle(), this->channelForEmotes());
+    bool hasImages = emojiTextRunsHaveEmoji(titleRuns);
+    qreal width = hasImages ? emojiTextWidth(metrics, titleRuns)
+                            : metrics.horizontalAdvance(this->getTitle());
     Qt::Alignment alignment = width > textRect.width()
                                   ? Qt::AlignLeft | Qt::AlignVCenter
                                   : Qt::AlignHCenter | Qt::AlignVCenter;
 
-    if (hasEmoji)
+    if (hasImages)
     {
         bool ready =
-            drawEmojiText(painter, emojiRuns, metrics, textRect, alignment);
-        scheduleEmojiRepaint(this, this->emojiRepaintsRemaining_, ready);
+            drawEmojiText(painter, titleRuns, metrics, textRect, alignment);
+        if (ready)
+        {
+            this->emojiRepaintsRemaining_ = EMOJI_LOAD_REPAINT_ATTEMPTS;
+        }
+        else if (this->emojiRepaintsRemaining_ > 0)
+        {
+            // Some emote/emoji images are still loading. Retry, re-measuring the
+            // tab size too so wide emotes aren't clipped once they arrive.
+            this->emojiRepaintsRemaining_--;
+            QTimer::singleShot(50, this, [this] {
+                this->updateSize();
+                this->update();
+            });
+        }
     }
     else
     {

@@ -19,6 +19,8 @@ namespace chatterino {
 inline constexpr int NOTEBOOK_TAB_HEIGHT = 28;
 
 class SplitContainer;
+class Channel;
+using ChannelPtr = std::shared_ptr<Channel>;
 
 class NotebookTab : public Button
 {
@@ -117,6 +119,11 @@ protected:
 
 private:
     void showRenameDialog();
+
+    /// The channel used as emote context for this tab's title (its selected
+    /// split's channel, or an empty channel). Used for rendering emote codes in
+    /// the title and for the rename dialog's emote input.
+    ChannelPtr channelForEmotes() const;
 
     bool hasXButton() const;
     bool shouldDrawXButton() const;

@@ -32,6 +32,29 @@ qreal emojiSizeFor(const QFontMetricsF &metrics)
     return metrics.height();
 }
 
+/// Returns the drawn width of an image run whose height is `size`. Emojis are
+/// square, but emotes can be wider/taller, so we keep the image's aspect ratio.
+/// While the image is still loading (aspect unknown) we reserve a square.
+qreal imageRunWidth(const EmotePtr &emote, qreal size)
+{
+    if (emote)
+    {
+        const auto &image = emote->images.getImage1();
+        if (image)
+        {
+            if (auto pixmap = image->pixmapOrLoad())
+            {
+                if (pixmap->height() > 0)
+                {
+                    return size * (static_cast<qreal>(pixmap->width()) /
+                                   static_cast<qreal>(pixmap->height()));
+                }
+            }
+        }
+    }
+    return size;
+}
+
 /// Returns the longest prefix of `text` (respecting surrogate pairs) that fits
 /// within `maxWidth`.
 QString trimTextToWidth(const QFontMetricsF &metrics, const QString &text,
@@ -112,7 +135,7 @@ qreal emojiTextWidth(const QFontMetricsF &metrics,
     {
         if (run.isEmoji())
         {
-            width += emojiSize;
+            width += imageRunWidth(run.emote, emojiSize);
         }
         else
         {
@@ -153,12 +176,13 @@ std::vector<EmojiTextRun> elideEmojiTextRuns(const QFontMetricsF &metrics,
 
         if (run.isEmoji())
         {
-            if (used + emojiSize > budget)
+            qreal runWidth = imageRunWidth(run.emote, emojiSize);
+            if (used + runWidth > budget)
             {
                 break;
             }
             out.push_back(run);
-            used += emojiSize;
+            used += runWidth;
         }
         else
         {
@@ -223,6 +247,7 @@ bool drawEmojiText(QPainter &painter, const std::vector<EmojiTextRun> &runs,
     {
         if (run.isEmoji())
         {
+            qreal runWidth = imageRunWidth(run.emote, emojiSize);
             const auto &image = run.emote->images.getImage1();
             std::optional<QPixmap> pixmap;
             if (image)
@@ -232,7 +257,7 @@ bool drawEmojiText(QPainter &painter, const std::vector<EmojiTextRun> &runs,
 
             if (pixmap)
             {
-                QRectF target(x, emojiTop, emojiSize, emojiSize);
+                QRectF target(x, emojiTop, runWidth, emojiSize);
                 painter.drawPixmap(target, *pixmap, QRectF{(*pixmap).rect()});
             }
             else
@@ -241,7 +266,7 @@ bool drawEmojiText(QPainter &painter, const std::vector<EmojiTextRun> &runs,
                 // is drawn yet. The caller should repaint once it's ready.
                 allReady = false;
             }
-            x += emojiSize;
+            x += runWidth;
         }
         else
         {
