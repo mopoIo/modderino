@@ -145,6 +145,9 @@ private:
     QString customTitle_;
     QString defaultTitle_;
 
+    /// Remaining bounded repaint retries while the title's emoji images load.
+    int emojiRepaintsRemaining_ = 40;
+
     bool selected_{};
     bool mouseOver_{};
     bool mouseDown_{};

@@ -607,6 +607,8 @@ set(SOURCE_FILES
         util/DebugCount.hpp
         util/DisplayBadge.cpp
         util/DisplayBadge.hpp
+        util/EmojiText.cpp
+        util/EmojiText.hpp
         util/Expected.hpp
         util/FilesystemHelpers.hpp
         util/FormatTime.cpp

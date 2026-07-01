@@ -14,6 +14,7 @@
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
+#include "util/EmojiText.hpp"
 #include "util/Helpers.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/Notebook.hpp"
@@ -424,15 +425,16 @@ int NotebookTab::normalTabWidthForHeight(int height) const
         getApp()->getFonts()->getFontMetrics(FontStyle::UiTabs, scale);
 
     float compactDivider = getCompactDivider(getSettings()->tabStyle);
+    qreal titleWidth = emojiTextWidth(metrics, this->getTitle());
     if (this->hasXButton())
     {
-        width = static_cast<int>(metrics.horizontalAdvance(this->getTitle()) +
-                                 (32 / compactDivider * scale));
+        width =
+            static_cast<int>(titleWidth + (32 / compactDivider * scale));
     }
     else
     {
-        width = static_cast<int>(metrics.horizontalAdvance(this->getTitle()) +
-                                 (16 / compactDivider * scale));
+        width =
+            static_cast<int>(titleWidth + (16 / compactDivider * scale));
     }
 
     if (static_cast<float>(height) > 150 * scale)
@@ -518,6 +520,9 @@ void NotebookTab::titleUpdated()
     // Queue up save because: Tab title changed
     getApp()->getWindows()->queueSave();
     this->notebook_->refresh();
+    // The title may now contain emoji whose images still need loading, so allow
+    // the paint loop to retry again.
+    this->emojiRepaintsRemaining_ = EMOJI_LOAD_REPAINT_ATTEMPTS;
     this->updateSize();
     this->update();
 }
@@ -999,14 +1004,26 @@ void NotebookTab::paintEvent(QPaintEvent *)
         textRect.setRight(textRect.right() - this->height() / 2);
     }
 
-    int width = metrics.horizontalAdvance(this->getTitle());
+    auto emojiRuns = parseEmojiText(this->getTitle());
+    bool hasEmoji = emojiTextRunsHaveEmoji(emojiRuns);
+    qreal width = hasEmoji ? emojiTextWidth(metrics, emojiRuns)
+                           : metrics.horizontalAdvance(this->getTitle());
     Qt::Alignment alignment = width > textRect.width()
                                   ? Qt::AlignLeft | Qt::AlignVCenter
                                   : Qt::AlignHCenter | Qt::AlignVCenter;
 
-    QTextOption option(alignment);
-    option.setWrapMode(QTextOption::NoWrap);
-    painter.drawText(textRect, this->getTitle(), option);
+    if (hasEmoji)
+    {
+        bool ready =
+            drawEmojiText(painter, emojiRuns, metrics, textRect, alignment);
+        scheduleEmojiRepaint(this, this->emojiRepaintsRemaining_, ready);
+    }
+    else
+    {
+        QTextOption option(alignment);
+        option.setWrapMode(QTextOption::NoWrap);
+        painter.drawText(textRect, this->getTitle(), option);
+    }
 
     // draw close x
     if (this->shouldDrawXButton())

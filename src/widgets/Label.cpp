@@ -5,6 +5,7 @@
 #include "widgets/Label.hpp"
 
 #include "Application.hpp"
+#include "util/EmojiText.hpp"
 
 #include <QPainter>
 
@@ -38,6 +39,9 @@ void Label::setText(const QString &text)
     if (this->text_ != text)
     {
         this->text_ = text;
+        // New text may contain emoji whose images still need loading, so allow
+        // the paint loop to retry again.
+        this->emojiRepaintsRemaining_ = EMOJI_LOAD_REPAINT_ATTEMPTS;
         if (this->shouldElide_)
         {
             this->updateElidedText(this->getFontMetrics(),
@@ -130,12 +134,39 @@ void Label::paintEvent(QPaintEvent * /*event*/)
         return this->text_;
     }();
 
+    painter.setBrush(this->palette().windowText());
+
+    // If the text contains emoji, render them as images (twemoji etc.), mirroring
+    // how they appear in chat. Word-wrapped labels fall back to plain text.
+    if (!this->wordWrap_)
+    {
+        auto emojiRuns = parseEmojiText(this->text_);
+        if (emojiTextRunsHaveEmoji(emojiRuns))
+        {
+            if (this->shouldElide_)
+            {
+                emojiRuns = elideEmojiTextRuns(metrics, std::move(emojiRuns),
+                                               textRect.width());
+            }
+
+            qreal emojiWidth = emojiTextWidth(metrics, emojiRuns);
+            Qt::Alignment emojiAlignment =
+                !this->centered_ || emojiWidth > textRect.width()
+                    ? Qt::AlignLeft | Qt::AlignVCenter
+                    : Qt::AlignCenter;
+
+            painter.setPen(this->palette().windowText().color());
+            bool ready = drawEmojiText(painter, emojiRuns, metrics, textRect,
+                                       emojiAlignment);
+            scheduleEmojiRepaint(this, this->emojiRepaintsRemaining_, ready);
+            return;
+        }
+    }
+
     qreal width = metrics.horizontalAdvance(text);
     Qt::Alignment alignment = !this->centered_ || width > textRect.width()
                                   ? Qt::AlignLeft | Qt::AlignVCenter
                                   : Qt::AlignCenter;
-
-    painter.setBrush(this->palette().windowText());
 
     QTextOption option(alignment);
     if (this->wordWrap_)
@@ -192,7 +223,7 @@ void Label::updateSize()
     }
     else
     {
-        auto width = metrics.horizontalAdvance(this->text_) +
+        auto width = emojiTextWidth(metrics, this->text_) +
                      this->currentPadding_.left() +
                      this->currentPadding_.right();
         this->sizeHint_ = QSizeF(width, height).toSize();

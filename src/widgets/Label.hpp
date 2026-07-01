@@ -74,6 +74,9 @@ protected:
     /// The text, but elided. Only set if shouldElide_ is true
     QString elidedText_;
 
+    /// Remaining bounded repaint retries while the text's emoji images load.
+    int emojiRepaintsRemaining_ = 40;
+
     pajlada::Signals::SignalHolder connections_;
 };
 
