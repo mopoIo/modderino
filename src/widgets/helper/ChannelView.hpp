@@ -433,6 +433,10 @@ private:
     QPointF lastDoubleClickPosition_;
     QTimer clickTimer_;
 
+    // URL under the cursor when the left button was pressed; a drag beyond
+    // the start-drag distance turns into a link drag instead of a selection
+    QString pendingLinkDragUrl_;
+
     bool isScrolling_ = false;
     bool isPanning_ = false;
     QPointF lastMiddlePressPosition_;

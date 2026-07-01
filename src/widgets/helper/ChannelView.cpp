@@ -62,11 +62,13 @@
 #include <QDate>
 #include <QDebug>
 #include <QDesktopServices>
+#include <QDrag>
 #include <QEasingCurve>
 #include <QGestureEvent>
 #include <QGraphicsBlurEffect>
 #include <QJsonDocument>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QPainter>
 #include <QScreen>
 #include <QStringBuilder>
@@ -2149,6 +2151,29 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
     const MessageLayoutElement *hoverLayoutElement =
         layout->getElementAt(relativePos);
 
+    // dragging a link (e.g. onto a browser) instead of selecting its text
+    if (this->isLeftMouseDown_ && !this->pendingLinkDragUrl_.isEmpty())
+    {
+        if ((event->globalPosition() - this->lastLeftPressPosition_)
+                .manhattanLength() >= QApplication::startDragDistance())
+        {
+            QUrl url(this->pendingLinkDragUrl_);
+            this->pendingLinkDragUrl_.clear();
+            this->isLeftMouseDown_ = false;
+            this->clearSelection();
+            this->tooltipWidget_->hide();
+
+            auto *drag = new QDrag(this);
+            auto *mimeData = new QMimeData;
+            mimeData->setUrls({url});
+            mimeData->setText(url.toString());
+            drag->setMimeData(mimeData);
+            drag->exec(Qt::CopyAction | Qt::LinkAction);
+        }
+
+        return;
+    }
+
     // selecting single characters
     if (this->isLeftMouseDown_)
     {
@@ -2380,6 +2405,16 @@ void ChannelView::mousePressEvent(QMouseEvent *event)
                 this->pause(PauseReason::DoubleClick, 200);
             }
 
+            const auto *pressedElement = layout->getElementAt(relativePos);
+            if (pressedElement != nullptr && pressedElement->getLink().isUrl())
+            {
+                this->pendingLinkDragUrl_ = pressedElement->getLink().value;
+            }
+            else
+            {
+                this->pendingLinkDragUrl_.clear();
+            }
+
             int index = layout->getSelectionIndex(relativePos);
             auto selectionItem = SelectionItem(messageIndex, index);
             this->setSelection(selectionItem, selectionItem);
@@ -2448,6 +2483,8 @@ void ChannelView::mouseReleaseEvent(QMouseEvent *event)
     // check if mouse was pressed
     if (event->button() == Qt::LeftButton)
     {
+        this->pendingLinkDragUrl_.clear();
+
         if (this->isDoubleClick_)
         {
             this->isDoubleClick_ = false;
