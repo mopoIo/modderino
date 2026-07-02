@@ -1,3 +1,18 @@
+Modderino
+=========
+
+Modderino is a small fork of Chatterino7 with some quality of life additions:
+
+- emotes and twemojis in tab names
+- a mod slider for deleting, timing out and banning people easily
+- 7TV styled chat highlights
+- links can be dragged as text, making it easy to open one as a new browser tab
+- a brand new Modderino theme
+
+![Modderino preview](.github/preview.png)
+
+---
+
 ![chatterinoLogo](https://user-images.githubusercontent.com/41973452/272541622-52457e89-5f16-4c83-93e7-91866c25b606.png)
 Chatterino7 [![GitHub Actions Build (Windows, Ubuntu, MacOS)](https://github.com/seventv/chatterino7/actions/workflows/build.yml/badge.svg?branch=chatterino7)](https://github.com/SevenTV/chatterino7/actions?query=workflow%3ABuild+branch%3Achatterino7) [![Chocolatey Package](https://img.shields.io/chocolatey/v/chatterino7?include_prereleases)](https://chocolatey.org/packages/chatterino7)
 ============
@@ -13,11 +28,6 @@ Chatterino7 is a fork of Chatterino 2. This fork mainly contains features that a
 - 7TV Animated Profile Avatars
 
 - 4x Images (7TV and FFZ)
-
-### Screenshots
-
-![Example of Personal Emotes](https://user-images.githubusercontent.com/27637025/227032811-837c56eb-7724-431b-b00e-b944c9289dff.png)
-![Example of Paints](https://user-images.githubusercontent.com/27637025/227034147-cb1fcd76-dbae-4878-9551-96ffa64dd1a9.png)
 
 ### Downloads
 
