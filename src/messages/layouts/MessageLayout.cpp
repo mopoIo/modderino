@@ -199,7 +199,7 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
             // uppercase, so its glyphs end at the baseline (ascent)
             qreal labelWidth =
                 labelMetrics.horizontalAdvance(style->label) +
-                6 * this->scale_;
+                9 * this->scale_;
             qreal labelGlyphBottom =
                 2 * this->scale_ + labelMetrics.ascent();
             QRectF labelZone(ctx.width - labelWidth, 0, labelWidth,
@@ -594,8 +594,9 @@ void MessageLayout::updateBuffer(QPixmap *buffer,
         font.setBold(true);
         painter.setFont(font);
         painter.setPen(seventvStyle->accent);
+        // 3px side border + 2px gap
         QRect labelRect(0, static_cast<int>(2 * scale),
-                        width - static_cast<int>(2 * scale), height);
+                        width - static_cast<int>(5 * scale), height);
         painter.drawText(labelRect, Qt::AlignRight | Qt::AlignTop,
                          seventvStyle->label);
     }
