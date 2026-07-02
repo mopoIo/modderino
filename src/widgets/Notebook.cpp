@@ -1182,6 +1182,13 @@ void Notebook::setLockNotebookLayout(bool value)
     this->lockNotebookLayout_ = value;
     this->lockNotebookLayoutAction_->setChecked(value);
     getSettings()->lockNotebookLayout.setValue(value);
+
+    // The tabs' close buttons are hidden while the layout is locked
+    for (auto &item : this->items_)
+    {
+        item.tab->updateSize();
+    }
+    this->performLayout();
 }
 
 void Notebook::addNotebookActionsToMenu(QMenu *menu)

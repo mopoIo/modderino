@@ -1128,7 +1128,8 @@ void NotebookTab::paintEvent(QPaintEvent *)
 bool NotebookTab::hasXButton() const
 {
     return getSettings()->showTabCloseButton &&
-           this->notebook_->getAllowUserTabManagement();
+           this->notebook_->getAllowUserTabManagement() &&
+           !this->notebook_->isNotebookLayoutLocked();
 }
 
 bool NotebookTab::shouldDrawXButton() const
