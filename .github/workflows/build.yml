@@ -336,7 +336,8 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         working-directory: build
         run: |
-          7z a chatterino-windows-${{ env.C2_ARCH }}-Qt-${{ matrix.qt-version }}.zip Chatterino2/
+          mv Chatterino2 Modderino
+          7z a chatterino-windows-${{ env.C2_ARCH }}-Qt-${{ matrix.qt-version }}.zip Modderino/
 
       - name: Upload artifact (Windows - binary)
         if: startsWith(matrix.os, 'windows') && !matrix.skip-artifact
@@ -466,10 +467,21 @@ jobs:
       - name: Rename artifacts
         run: |
           ls -l
+          # Rename all artifacts to Modderino
+          for f in *; do
+            n="${f//chatterino/Modderino}"
+            n="${n//Chatterino/Modderino}"
+            if [ "$f" != "$n" ]; then
+              mv "$f" "$n"
+            fi
+          done
+          if [ -f Modderino_7TV-x86_64.AppImage ]; then
+            mv Modderino_7TV-x86_64.AppImage Modderino-x86_64.AppImage
+          fi
           # Rename the macos build to indicate that it's for macOS 13.0 users
-          mv chatterino-macos-Qt-6.9.3-universal.dmg Chatterino-macOS-13.0-universal.dmg
+          mv Modderino-macos-Qt-6.9.3-universal.dmg Modderino-macOS-13.0-universal.dmg
           # Rename Windows ARM64 to indicate that it's not well tested
-          mv chatterino-windows-arm-Qt-6.9.3.zip Experimental-ARM64-chatterino-windows-Qt-6.9.3.zip
+          mv Modderino-windows-arm-Qt-6.9.3.zip Experimental-ARM64-Modderino-windows-Qt-6.9.3.zip
         working-directory: release-artifacts
         shell: bash
 
@@ -498,7 +510,7 @@ jobs:
           artifacts: "release-artifacts/*"
           body: ${{ steps.format-changes.outputs.changelog }}
           prerelease: true
-          name: Nightly Release
+          name: Modderino Nightly
           tag: nightly-build
 
       - name: Update nightly-build tag
