@@ -1312,10 +1312,10 @@ void SplitHeader::themeChangedEvent()
     }
     this->titleLabel_->setPalette(palette);
 
-    auto bg = this->theme->splits.header.background;
+    // Transparent so the header's border stays visible around the button
     this->addButton_->setOptions({
-        .background = bg,
-        .backgroundHover = bg,
+        .background = QColor(Qt::transparent),
+        .backgroundHover = QColor(Qt::transparent),
     });
 
     this->update();
