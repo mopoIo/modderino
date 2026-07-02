@@ -234,8 +234,9 @@ void Window::addCustomTitlebarButtons()
                 this->userLabel_->rect().bottomLeft()));
     });
     this->userLabel_->setMinimumWidth(20 * this->scale());
-    // Truncate on the right when squeezed instead of clipping on both sides
+    // Elide with "…" when the title bar is too narrow instead of clipping
     this->userLabel_->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    this->userLabel_->setElide(true);
 
     // streamer mode
     this->streamerModeTitlebarIcon_ =
@@ -812,16 +813,14 @@ void Window::onAccountSelected()
     // update user
     if (this->userLabel_)
     {
-        QString name =
-            user->isAnon() ? QStringLiteral("anonymous") : user->getUserName();
-        this->userLabel_->setText(name);
-
-        // Reserve enough room for the full name; otherwise the layout may
-        // compress the label and clip the centered text on both sides.
-        auto textWidth =
-            this->userLabel_->fontMetrics().horizontalAdvance(name);
-        this->userLabel_->setMinimumWidth(textWidth +
-                                          static_cast<int>(16 * this->scale()));
+        if (user->isAnon())
+        {
+            this->userLabel_->setText("anonymous");
+        }
+        else
+        {
+            this->userLabel_->setText(user->getUserName());
+        }
     }
 }
 
