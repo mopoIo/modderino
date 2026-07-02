@@ -132,6 +132,18 @@ NotebookTab::NotebookTab(Notebook *notebook)
             }
         });
 
+    // Image loads only trigger chat re-layouts; repaint the tab too so
+    // title emotes appear without needing a hover
+    this->managedConnections_.managedConnect(
+        getApp()->getWindows()->layoutRequested, [this](Channel *) {
+            if (this->titleImagesPending_)
+            {
+                this->titleImagesPending_ = false;
+                this->updateSize();
+            }
+            this->update();
+        });
+
     this->setMouseTracking(true);
 
     this->menu_.addAction("Rename Tab", [this]() {
@@ -1091,6 +1103,7 @@ void NotebookTab::paintEvent(QPaintEvent *)
     {
         bool ready =
             drawEmojiText(painter, titleRuns, metrics, textRect, alignment);
+        this->titleImagesPending_ = !ready;
         if (ready)
         {
             this->emojiRepaintsRemaining_ = EMOJI_LOAD_REPAINT_ATTEMPTS;

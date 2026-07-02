@@ -159,6 +159,9 @@ private:
     /// updated on paint, drives GIF-timer repaints
     bool titleAnimated_ = false;
 
+    /// Whether title images were still loading during the last paint
+    bool titleImagesPending_ = false;
+
     bool selected_{};
     bool mouseOver_{};
     bool mouseDown_{};
