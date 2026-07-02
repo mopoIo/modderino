@@ -1,5 +1,4 @@
-Modderino
-=========
+# Modderino
 
 Modderino is a small fork of Chatterino7 with some quality of life additions:
 
