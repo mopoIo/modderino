@@ -9,10 +9,15 @@
 #include "common/Common.hpp"
 #include "widgets/helper/EmoteInputLineEdit.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/emotes/EmoteController.hpp"
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "messages/Emote.hpp"
 #include "messages/EmoteResolver.hpp"
+#include "messages/Image.hpp"
+#include "messages/ImageSet.hpp"
 #include "singletons/Fonts.hpp"
+#include "singletons/helper/GifTimer.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
@@ -117,6 +122,15 @@ NotebookTab::NotebookTab(Notebook *notebook)
             this->update();
         },
         this->managedConnections_);
+
+    // Animated emotes/emojis in the tab title repaint with the GIF timer
+    this->managedConnections_.managedConnect(
+        getApp()->getEmotes()->getGIFTimer()->signal, [this] {
+            if (this->titleAnimated_)
+            {
+                this->update();
+            }
+        });
 
     this->setMouseTracking(true);
 
@@ -448,21 +462,25 @@ int NotebookTab::normalTabWidthForHeight(int height) const
     float scale = this->scale();
     int width = 0;
 
-    auto metrics =
-        getApp()->getFonts()->getFontMetrics(FontStyle::UiTabs, scale);
+    // Measure against this widget as a paint device so the metrics match the
+    // DPI the text is actually rendered at; plain metrics can under-measure
+    // on multi-monitor setups and crop the last characters.
+    QFontMetricsF metrics{
+        getApp()->getFonts()->getFont(FontStyle::UiTabs, scale), this};
 
     float compactDivider = getCompactDivider(getSettings()->tabStyle);
-    qreal titleWidth = emojiTextWidth(
-        metrics, parseEmotesAndEmojis(this->getTitle(), this->channelForEmotes()));
+    qreal titleWidth =
+        emojiTextWidth(metrics, parseEmotesAndEmojis(
+                                    this->getTitle(), this->channelForEmotes()));
     if (this->hasXButton())
     {
         width =
-            static_cast<int>(titleWidth + (32 / compactDivider * scale));
+            static_cast<int>(titleWidth + (32 / compactDivider * scale)) + 2;
     }
     else
     {
         width =
-            static_cast<int>(titleWidth + (16 / compactDivider * scale));
+            static_cast<int>(titleWidth + (16 / compactDivider * scale)) + 2;
     }
 
     if (static_cast<float>(height) > 150 * scale)
@@ -471,7 +489,12 @@ int NotebookTab::normalTabWidthForHeight(int height) const
     }
     else
     {
-        width = std::clamp(width, height, static_cast<int>(150 * scale));
+        // Only limit a tab's width by the notebook itself - a tab should
+        // always show its full title unless there's truly no room for it.
+        int maxWidth = std::max(static_cast<int>(150 * scale),
+                                this->notebook_->width() -
+                                    static_cast<int>(8 * scale));
+        width = std::clamp(width, height, maxWidth);
     }
 
     return width;
@@ -502,9 +525,14 @@ const QString &NotebookTab::getCustomTitle() const
 
 void NotebookTab::setCustomTitle(const QString &newTitle)
 {
-    if (this->customTitle_ != newTitle)
+    // Drop leading/trailing spaces; the title should start and end on visible
+    // text. A title of only spaces becomes empty, which falls back to the
+    // default title.
+    auto title = newTitle.trimmed();
+
+    if (this->customTitle_ != title)
     {
-        this->customTitle_ = newTitle;
+        this->customTitle_ = title;
         this->titleUpdated();
     }
 }
@@ -900,7 +928,9 @@ void NotebookTab::paintEvent(QPaintEvent *)
     float scale = this->scale();
 
     painter.setFont(app->getFonts()->getFont(FontStyle::UiTabs, scale));
-    auto metrics = app->getFonts()->getFontMetrics(FontStyle::UiTabs, scale);
+    // Device-aware metrics; see normalTabWidthForHeight
+    QFontMetricsF metrics{app->getFonts()->getFont(FontStyle::UiTabs, scale),
+                          this};
 
     int height = int(scale * NOTEBOOK_TAB_HEIGHT);
 
@@ -1035,6 +1065,22 @@ void NotebookTab::paintEvent(QPaintEvent *)
     auto titleRuns =
         parseEmotesAndEmojis(this->getTitle(), this->channelForEmotes());
     bool hasImages = emojiTextRunsHaveEmoji(titleRuns);
+
+    // Remember whether any title image is animated so the GIF timer can
+    // drive repaints (otherwise animated emotes in tabs barely move).
+    this->titleAnimated_ = false;
+    for (const auto &run : titleRuns)
+    {
+        if (run.isEmoji() && run.emote)
+        {
+            const auto &image = run.emote->images.getImage1();
+            if (image && image->animated())
+            {
+                this->titleAnimated_ = true;
+                break;
+            }
+        }
+    }
     qreal width = hasImages ? emojiTextWidth(metrics, titleRuns)
                             : metrics.horizontalAdvance(this->getTitle());
     Qt::Alignment alignment = width > textRect.width()

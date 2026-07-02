@@ -155,6 +155,10 @@ private:
     /// Remaining bounded repaint retries while the title's emoji images load.
     int emojiRepaintsRemaining_ = 40;
 
+    /// Whether the current title contains an animated emote/emoji image;
+    /// updated on paint, drives GIF-timer repaints
+    bool titleAnimated_ = false;
+
     bool selected_{};
     bool mouseOver_{};
     bool mouseDown_{};
