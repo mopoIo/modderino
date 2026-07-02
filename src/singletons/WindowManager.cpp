@@ -182,6 +182,8 @@ WindowManager::WindowManager(const Args &appArgs_, const Paths &paths,
     this->invalidateChannelViewBuffersListener.add(settings.alternateMessages);
     this->invalidateChannelViewBuffersListener.add(settings.separateMessages);
     this->invalidateChannelViewBuffersListener.add(settings.fadeMessageHistory);
+    this->invalidateChannelViewBuffersListener.add(
+        settings.seventvStyledHighlights);
 
     this->repaintVisibleChatWidgetsListener.add(
         this->themes.repaintVisibleChatWidgets_);

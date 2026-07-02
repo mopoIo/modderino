@@ -484,6 +484,10 @@ private:
     void updateModSlider(const std::shared_ptr<MessageLayout> &layout,
                          const QPointF &eventPos, const QPointF &relativePos);
 
+    /// Updates the 7TV highlight "stacked" state of the message at @a index
+    void updateSeventvStacked(const std::vector<MessageLayoutPtr> &messages,
+                              size_t index, const QString &currentLogin);
+
     /// Pointer to a link info that hasn't loaded yet
     QPointer<LinkInfo> pendingLinkInfo_;
 

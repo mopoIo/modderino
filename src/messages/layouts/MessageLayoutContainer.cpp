@@ -17,6 +17,8 @@
 
 #include <QDebug>
 #include <QMargins>
+
+#include <algorithm>
 #include <QPainter>
 #include <QVarLengthArray>
 
@@ -39,8 +41,10 @@ int maxUncollapsedLines()
 namespace chatterino {
 
 void MessageLayoutContainer::beginLayout(qreal width, float scale,
-                                         float imageScale, MessageFlags flags)
+                                         float imageScale, MessageFlags flags,
+                                         qreal extraTopPadding)
 {
+    this->extraTopPadding_ = extraTopPadding;
     this->elements_.clear();
     this->lines_.clear();
 
@@ -66,6 +70,22 @@ void MessageLayoutContainer::beginLayout(qreal width, float scale,
     this->isCollapsed_ = false;
     this->lineContainsRTL_ = false;
     this->anyReorderingDone_ = false;
+}
+
+bool MessageLayoutContainer::anyElementIntersects(const QRectF &rect) const
+{
+    return std::ranges::any_of(this->elements_, [&](const auto &element) {
+        return element->getRect().intersects(rect);
+    });
+}
+
+bool MessageLayoutContainer::anyImageElementIntersects(const QRectF &rect) const
+{
+    return std::ranges::any_of(this->elements_, [&](const auto &element) {
+        return element->getCreator().getFlags().has(
+                   MessageElementFlag::EmoteImage) &&
+               element->getRect().intersects(rect);
+    });
 }
 
 void MessageLayoutContainer::endLayout()
@@ -667,7 +687,8 @@ void MessageLayoutContainer::addElement(MessageLayoutElement *element,
     // top margin
     if (this->elements_.empty())
     {
-        this->currentY_ = int(MARGIN.top() * this->scale_);
+        this->currentY_ =
+            int(MARGIN.top() * this->scale_ + this->extraTopPadding_);
     }
 
     qreal elementLineHeight = element->getRect().height();

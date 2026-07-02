@@ -115,9 +115,18 @@ public:
     // Misc
     bool isDisabled() const;
 
+    /// Stacked messages (directly following one with the same 7TV highlight
+    /// style) don't repeat the corner label.
+    void setSeventvStacked(bool stacked);
+    bool isSeventvStacked() const;
+
 private:
     // methods
     void actuallyLayout(const MessageLayoutContext &ctx);
+    void addElementsToContainer(const MessageLayoutContext &ctx,
+                                bool hideModerated, bool hideModerationActions,
+                                bool hideBlockedTermAutomodMessages,
+                                bool hideSimilar, bool hideReplies);
     void updateBuffer(QPixmap *buffer, const MessagePaintContext &ctx);
 
     // Create new buffer if required, returning the buffer
@@ -127,6 +136,7 @@ private:
     const MessagePtr message_;
     MessageLayoutContainer container_;
     std::unique_ptr<QPixmap> buffer_;
+    bool seventvStacked_ = false;
     bool bufferValid_ = false;
 
     qreal height_ = 0;

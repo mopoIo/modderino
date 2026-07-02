@@ -5,6 +5,7 @@
 #include "messages/layouts/MessageLayout.hpp"
 
 #include "Application.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "messages/layouts/MessageLayoutContainer.hpp"
 #include "messages/layouts/MessageLayoutContext.hpp"
 #include "messages/layouts/MessageLayoutElement.hpp"
@@ -12,6 +13,8 @@
 #include "messages/MessageElement.hpp"
 #include "messages/Selection.hpp"
 #include "providers/colors/ColorProvider.hpp"
+#include "providers/twitch/TwitchAccount.hpp"
+#include "singletons/Fonts.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
 #include "singletons/WindowManager.hpp"
@@ -22,6 +25,8 @@
 #include <QPainter>
 #include <QtGlobal>
 #include <QThread>
+
+#include <optional>
 
 namespace chatterino {
 
@@ -36,6 +41,12 @@ QColor blendColors(const QColor &base, const QColor &apply)
                    base.blueF() * (1 - alpha) + apply.blueF() * alpha);
     return result;
 }
+
+QString currentUserLogin()
+{
+    return getApp()->getAccounts()->twitch.getCurrent()->getUserName();
+}
+
 }  // namespace
 
 MessageLayout::MessageLayout(MessagePtr message)
@@ -151,9 +162,91 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
     bool hideSimilar = getSettings()->hideSimilar;
     bool hideReplies = !ctx.flags.has(MessageElementFlag::RepliedMessage);
 
-    this->container_.beginLayout(ctx.width, this->scale_, this->imageScale_,
-                                 messageFlags);
+    auto layoutPass = [&](qreal extraTopPadding) {
+        this->container_.beginLayout(ctx.width, this->scale_,
+                                     this->imageScale_, messageFlags,
+                                     extraTopPadding);
 
+        this->addElementsToContainer(ctx, hideModerated, hideModerationActions,
+                                     hideBlockedTermAutomodMessages,
+                                     hideSimilar, hideReplies);
+
+        this->container_.endLayout();
+    };
+
+    layoutPass(0);
+
+    // If content would sit underneath the 7TV highlight corner label,
+    // re-layout with enough top padding to clear it.
+    if (!this->seventvStacked_)
+    {
+        auto style = seventvHighlightStyle(
+            *this->message_,
+            this->flags.has(MessageLayoutFlag::IgnoreHighlights),
+            currentUserLogin());
+        if (style)
+        {
+            auto labelFont = getApp()->getFonts()->getFont(
+                FontStyle::ChatSmall, this->scale_);
+            labelFont.setBold(true);
+            // Measure against a pixmap so the metrics match the DPI the
+            // buffer is painted at (plain metrics can differ on
+            // multi-monitor setups)
+            static QPixmap fontProbe(1, 1);
+            QFontMetricsF labelMetrics(labelFont, &fontProbe);
+
+            // matches the label placement in updateBuffer; the label is
+            // uppercase, so its glyphs end at the baseline (ascent)
+            qreal labelWidth =
+                labelMetrics.horizontalAdvance(style->label) +
+                6 * this->scale_;
+            qreal labelGlyphBottom =
+                2 * this->scale_ + labelMetrics.ascent();
+            QRectF labelZone(ctx.width - labelWidth, 0, labelWidth,
+                             labelGlyphBottom + this->scale_);
+
+            if (this->container_.anyElementIntersects(labelZone))
+            {
+                qreal padding = labelMetrics.ascent();
+
+                if (!this->container_.anyImageElementIntersects(labelZone))
+                {
+                    // text glyphs start below the top of their line box,
+                    // unlike emote images which fill theirs
+                    QFontMetricsF textMetrics(
+                        getApp()->getFonts()->getFont(FontStyle::ChatMedium,
+                                                      this->scale_),
+                        &fontProbe);
+                    padding -= std::max<qreal>(
+                        0, textMetrics.ascent() - textMetrics.capHeight() -
+                               2 * this->scale_);
+                }
+
+                layoutPass(std::max<qreal>(0, padding));
+            }
+        }
+    }
+
+    if (this->height_ != this->container_.getHeight())
+    {
+        this->deleteBuffer();
+    }
+
+    this->height_ = this->container_.getHeight();
+
+    // collapsed state
+    this->flags.unset(MessageLayoutFlag::Collapsed);
+    if (this->container_.isCollapsed())
+    {
+        this->flags.set(MessageLayoutFlag::Collapsed);
+    }
+}
+
+void MessageLayout::addElementsToContainer(
+    const MessageLayoutContext &ctx, bool hideModerated,
+    bool hideModerationActions, bool hideBlockedTermAutomodMessages,
+    bool hideSimilar, bool hideReplies)
+{
     for (const auto &element : this->message_->elements)
     {
         if (hideModerated && this->message_->flags.has(MessageFlag::Disabled))
@@ -205,21 +298,21 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
 
         element->addToContainer(this->container_, ctx);
     }
+}
 
-    if (this->height_ != this->container_.getHeight())
+void MessageLayout::setSeventvStacked(bool stacked)
+{
+    if (this->seventvStacked_ != stacked)
     {
-        this->deleteBuffer();
+        this->seventvStacked_ = stacked;
+        this->flags.set(MessageLayoutFlag::RequiresLayout);
+        this->invalidateBuffer();
     }
+}
 
-    this->container_.endLayout();
-    this->height_ = this->container_.getHeight();
-
-    // collapsed state
-    this->flags.unset(MessageLayoutFlag::Collapsed);
-    if (this->container_.isCollapsed())
-    {
-        this->flags.set(MessageLayoutFlag::Collapsed);
-    }
+bool MessageLayout::isSeventvStacked() const
+{
+    return this->seventvStacked_;
 }
 
 // Painting
@@ -385,8 +478,19 @@ void MessageLayout::updateBuffer(QPixmap *buffer,
         return ctx.messageColors.regularBg;
     }();
 
-    if (this->message_->flags.has(MessageFlag::ElevatedMessage) &&
-        ctx.preferences.enableElevatedMessageHighlight)
+    auto seventvStyle = seventvHighlightStyle(
+        *this->message_, this->flags.has(MessageLayoutFlag::IgnoreHighlights),
+        currentUserLogin());
+
+    if (seventvStyle)
+    {
+        // ~10% tint of the accent color
+        auto tint = seventvStyle->accent;
+        tint.setAlpha(26);
+        backgroundColor = blendColors(backgroundColor, tint);
+    }
+    else if (this->message_->flags.has(MessageFlag::ElevatedMessage) &&
+             ctx.preferences.enableElevatedMessageHighlight)
     {
         backgroundColor = blendColors(
             backgroundColor,
@@ -476,6 +580,25 @@ void MessageLayout::updateBuffer(QPixmap *buffer,
 
     // draw message
     this->container_.paintElements(painter, ctx);
+
+    if (seventvStyle && !this->seventvStacked_)
+    {
+        // corner label; the side borders are drawn by the ChannelView so
+        // they can sit at the very edge of the view
+        auto scale = this->scale_ > 0 ? this->scale_ : 1.0F;
+        int width = this->container_.getWidth();
+        int height = this->container_.getHeight();
+
+        auto font =
+            getApp()->getFonts()->getFont(FontStyle::ChatSmall, scale);
+        font.setBold(true);
+        painter.setFont(font);
+        painter.setPen(seventvStyle->accent);
+        QRect labelRect(0, static_cast<int>(2 * scale),
+                        width - static_cast<int>(2 * scale), height);
+        painter.drawText(labelRect, Qt::AlignRight | Qt::AlignTop,
+                         seventvStyle->label);
+    }
 
 #ifdef FOURTF
     // debug

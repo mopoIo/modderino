@@ -41,14 +41,22 @@ struct MessageLayoutContainer {
      *
      * This will reset all line calculations, and will be considered incomplete
      * until the accompanying end function has been called
+     *
+     * @a extraTopPadding adds space above the first line.
      */
     void beginLayout(qreal width, float scale, float imageScale,
-                     MessageFlags flags);
+                     MessageFlags flags, qreal extraTopPadding = 0);
 
     /**
      * Finish the layout process of this message
      */
     void endLayout();
+
+    /// Returns true if any laid-out element intersects @a rect
+    bool anyElementIntersects(const QRectF &rect) const;
+
+    /// Like anyElementIntersects, but only considers emote images
+    bool anyImageElementIntersects(const QRectF &rect) const;
 
     /**
      * Add the given `element` to this message.
@@ -331,6 +339,7 @@ private:
 
     // variables
     float scale_ = 1.F;
+    qreal extraTopPadding_ = 0;
     /**
      * Scale factor for images
      */

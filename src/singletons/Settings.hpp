@@ -568,6 +568,11 @@ public:
     QStringSetting redeemedHighlightColor = {
         "/highlighting/redeemedHighlightColor", ""};
 
+    /// Render special messages with a tinted background, side borders and a
+    /// small corner label
+    BoolSetting seventvStyledHighlights = {
+        "/highlighting/seventvStyledHighlights", true};
+
     BoolSetting enableFirstMessageHighlight = {
         "/highlighting/firstMessageHighlight/highlighted", true};
     //    BoolSetting enableFirstMessageHighlightSound = {

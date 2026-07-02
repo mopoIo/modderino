@@ -701,6 +701,33 @@ void ChannelView::performLayout(bool causedByScrollbar, bool causedByShow)
                                   !this->scrollBar_->isAtBottom());
 }
 
+void ChannelView::updateSeventvStacked(
+    const std::vector<MessageLayoutPtr> &messages, size_t index,
+    const QString &currentLogin)
+{
+    const auto &message = messages[index];
+
+    bool stacked = false;
+    if (index > 0)
+    {
+        auto cur = seventvHighlightStyle(
+            *message->getMessagePtr(),
+            message->flags.has(MessageLayoutFlag::IgnoreHighlights),
+            currentLogin);
+        if (cur)
+        {
+            const auto &prevMessage = messages[index - 1];
+            auto prev = seventvHighlightStyle(
+                *prevMessage->getMessagePtr(),
+                prevMessage->flags.has(MessageLayoutFlag::IgnoreHighlights),
+                currentLogin);
+            stacked = prev && prev->label == cur->label;
+        }
+    }
+
+    message->setSeventvStacked(stacked);
+}
+
 void ChannelView::layoutVisibleMessages(
     const std::vector<MessageLayoutPtr> &messages)
 {
@@ -716,10 +743,14 @@ void ChannelView::layoutVisibleMessages(
 
         auto [selectedChannel, mcFlags] = this->getMultiChannelInfo();
         auto layoutFlags = flags | mcFlags;
+        auto currentLogin =
+            getApp()->getAccounts()->twitch.getCurrent()->getUserName();
 
         for (auto i = start; i < messages.size() && y <= this->height(); i++)
         {
             const auto &message = messages[i];
+
+            this->updateSeventvStacked(messages, i, currentLogin);
 
             redrawRequired |= message->layout(
                 {
@@ -761,11 +792,15 @@ void ChannelView::updateScrollbar(const std::vector<MessageLayoutPtr> &messages,
     auto showScrollbar = false;
     auto [selectedChannel, mcFlags] = this->getMultiChannelInfo();
     flags = flags | mcFlags;
+    auto currentLogin =
+        getApp()->getAccounts()->twitch.getCurrent()->getUserName();
 
     // convert i to int since it checks >= 0
     for (auto i = int(messages.size()) - 1; i >= 0; i--)
     {
         auto *message = messages[i].get();
+
+        this->updateSeventvStacked(messages, size_t(i), currentLogin);
 
         message->layout(
             {
@@ -1801,6 +1836,9 @@ void ChannelView::drawMessages(QPainter &painter, const QRect &area)
         return y >= area.y() && y < area.y() + area.height();
     };
 
+    auto currentLogin =
+        getApp()->getAccounts()->twitch.getCurrent()->getUserName();
+
     for (; ctx.messageIndex < messagesSnapshot.size(); ++ctx.messageIndex)
     {
         MessageLayout *layout = messagesSnapshot[ctx.messageIndex].get();
@@ -1834,6 +1872,34 @@ void ChannelView::drawMessages(QPainter &painter, const QRect &area)
             if (modDragged)
             {
                 painter.restore();
+            }
+
+            // 7TV styled highlights: borders on both sides, at the very
+            // edge of the view (past the message buffer's width)
+            if (auto styled = seventvHighlightStyle(
+                    *layout->getMessagePtr(),
+                    layout->flags.has(MessageLayoutFlag::IgnoreHighlights),
+                    currentLogin))
+            {
+                int borderWidth =
+                    std::max(2, static_cast<int>(3 * this->scale()));
+                QRect leftBorder(0, ctx.y, borderWidth, layout->getHeight());
+                QRect rightBorder(this->width() - borderWidth, ctx.y,
+                                  borderWidth, layout->getHeight());
+                painter.fillRect(leftBorder, styled->accent);
+                painter.fillRect(rightBorder, styled->accent);
+
+                // apply the same dim the message content gets
+                const auto &msgFlags = layout->getMessagePtr()->flags;
+                if (msgFlags.has(MessageFlag::Disabled) ||
+                    (msgFlags.has(MessageFlag::RecentMessage) &&
+                     this->messagePreferences_.fadeMessageHistory))
+                {
+                    painter.fillRect(leftBorder,
+                                     this->messageColors_.disabled);
+                    painter.fillRect(rightBorder,
+                                     this->messageColors_.disabled);
+                }
             }
             if (paintResult.hasAnimatedElements)
             {

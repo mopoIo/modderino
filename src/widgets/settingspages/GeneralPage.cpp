@@ -503,6 +503,13 @@ void GeneralPage::initLayout(GeneralPageView &layout)
                      "message to help better tell them apart.")
         ->addTo(layout);
 
+    SettingWidget::checkbox("7TV styled highlights", s.seventvStyledHighlights)
+        ->setTooltip("Render mentions, subscriptions, first messages, "
+                     "highlights and announcements with a subtle tinted "
+                     "background, colored side borders and a small label in "
+                     "the top-right corner.")
+        ->addTo(layout);
+
     SettingWidget::checkbox("Reduce opacity of message history",
                             s.fadeMessageHistory)
         ->setTooltip(
