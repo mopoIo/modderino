@@ -7,12 +7,25 @@
 #include "Application.hpp"
 #include "common/enums/MessageOverflow.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/CommandController.hpp"
+#include "controllers/completion/strategies/ClassicEmoteStrategy.hpp"
+#include "controllers/completion/strategies/SmartEmoteStrategy.hpp"
+#include "controllers/emotes/EmoteController.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/spellcheck/SpellChecker.hpp"
+#include "messages/Emote.hpp"
 #include "messages/Link.hpp"
 #include "messages/Message.hpp"
+#include "providers/bttv/BttvEmotes.hpp"
+#include "providers/emoji/Emojis.hpp"
+#include "providers/ffz/FfzEmotes.hpp"
+#include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickChannel.hpp"
+#include "providers/kick/KickChatServer.hpp"
+#include "providers/seventv/SeventvEmotes.hpp"
+#include "providers/seventv/SeventvPersonalEmotes.hpp"
+#include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchCommon.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -37,10 +50,14 @@
 #include "widgets/splits/InputHighlighter.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
+#include "widgets/splits/TabEmoteWheel.hpp"
+#include "widgets/TooltipWidget.hpp"
 
 #include <QActionGroup>
 #include <QCompleter>
+#include <QGuiApplication>
 #include <QPainter>
+#include <QSet>
 #include <QSignalBlocker>
 #include <qwindow.h>
 
@@ -54,6 +71,24 @@ using namespace Qt::Literals;
 namespace chatterino {
 
 namespace {
+
+float getTooltipScale(EmoteTooltipScale emoteTooltipScale)
+{
+    switch (emoteTooltipScale)
+    {
+        case EmoteTooltipScale::Small:
+            return 0.5F;
+        case EmoteTooltipScale::Medium:
+            return 1.0F;
+        case EmoteTooltipScale::Large:
+            return 1.5F;
+        case EmoteTooltipScale::Huge:
+            return 2.0F;
+
+        default:
+            return 1.0F;
+    }
+}
 
 // Current function: https://www.desmos.com/calculator/vdyamchjwh
 qreal highlightEasingFunction(qreal progress)
@@ -139,6 +174,45 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
     // destroyed, so we can safely ignore this signal's connection.
     std::ignore = this->ui_.textEdit->focusLost.connect([this] {
         this->hideCompletionPopup();
+        this->finalizeTabWheel(false);
+    });
+    this->ui_.textEdit->viewport()->installEventFilter(this);
+
+    // A selection (e.g. Ctrl+A) closes the wheel; its keyboard handling
+    // would otherwise clobber the selection
+    QObject::connect(this->ui_.textEdit, &QTextEdit::selectionChanged, this,
+                     [this] {
+                         if (this->tabWheelActive_ &&
+                             this->ui_.textEdit->textCursor().hasSelection())
+                         {
+                             this->finalizeTabWheel(false);
+                         }
+                     });
+
+    // Hovering an inline emote image shows the same tooltip as in chat
+    this->inputTooltip_ = new TooltipWidget(this);
+    std::ignore = this->ui_.textEdit->inlineEmoteHovered.connect(
+        [this](const ResizingTextEdit::InlineEmoteTooltip &tooltip,
+               QPoint globalPos) {
+            auto showThumbnailSetting =
+                getSettings()->emotesTooltipPreview.getEnum();
+            bool showThumbnail =
+                showThumbnailSetting == ThumbnailPreviewMode::AlwaysShow ||
+                (showThumbnailSetting == ThumbnailPreviewMode::ShowOnShift &&
+                 QGuiApplication::keyboardModifiers() == Qt::ShiftModifier);
+
+            auto tooltipScale = getSettings()->emoteTooltipScale.getEnum();
+            this->inputTooltip_->setOne(TooltipEntry::scaled(
+                showThumbnail ? tooltip.image : nullptr, tooltip.text,
+                getTooltipScale(tooltipScale)));
+            this->inputTooltip_->moveTo(
+                globalPos + QPoint(16, 16),
+                widgets::BoundsChecking::CursorPosition);
+            this->inputTooltip_->setWordWrap(false);
+            this->inputTooltip_->show();
+        });
+    std::ignore = this->ui_.textEdit->inlineEmoteHoverEnded.connect([this] {
+        this->inputTooltip_->hide();
     });
     this->scaleChangedEvent(this->scale());
     this->signalHolder_.managedConnect(getApp()->getHotkeys()->onItemsUpdated,
@@ -258,6 +332,9 @@ void SplitInput::initLayout()
     connect(textEdit.getElement(), &ResizingTextEdit::textChanged, this,
             &SplitInput::editTextChanged);
     textEdit->setFrameStyle(QFrame::NoFrame);
+    textEdit->setInlineEmoteResolver([this](const QString &word) {
+        return this->resolveInlineEmote(word);
+    });
 
     auto *shortcutFilter = new CmdDeleteKeyFilter(this);
     textEdit->installEventFilter(shortcutFilter);
@@ -467,10 +544,14 @@ void SplitInput::openEmotePopup()
                     QTextCursor cursor = this->ui_.textEdit->textCursor();
                     QString textToInsert(link.value + " ");
 
-                    // If symbol before cursor isn't space or empty
-                    // Then insert space before emote.
-                    if (cursor.position() > 0 &&
-                        !this->getInputText()[cursor.position() - 1].isSpace())
+                    // If symbol before cursor isn't space, empty, or an
+                    // inline emote image, insert a space before the emote.
+                    QChar charBefore =
+                        this->ui_.textEdit->document()->characterAt(
+                            cursor.position() - 1);
+                    if (cursor.position() > 0 && !charBefore.isSpace() &&
+                        charBefore !=
+                            QChar(QChar::ObjectReplacementCharacter))
                     {
                         textToInsert = " " + textToInsert;
                     }
@@ -505,7 +586,7 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
     if (!c->isTwitchOrKickChannel() || this->replyTarget_ == nullptr)
     {
         // standard message send behavior
-        QString message = this->ui_.textEdit->toPlainText();
+        QString message = this->ui_.textEdit->serializedText();
 
         message = message.replace('\n', ' ');
         QString sendMessage =
@@ -526,7 +607,7 @@ QString SplitInput::handleSendMessage(const std::vector<QString> &arguments)
         return "";
     }
 
-    QString message = this->ui_.textEdit->toPlainText();
+    QString message = this->ui_.textEdit->serializedText();
 
     if (this->enableInlineReplying_)
     {
@@ -690,7 +771,7 @@ void SplitInput::addShortcuts()
 
              if (this->prevIndex_ == (this->prevMsg_.size()))
              {
-                 this->currMsg_ = this->ui_.textEdit->toPlainText();
+                 this->currMsg_ = this->ui_.textEdit->serializedText();
              }
 
              this->prevIndex_--;
@@ -715,7 +796,7 @@ void SplitInput::addShortcuts()
                  return "";
              }
              bool cursorToEnd = true;
-             QString message = this->ui_.textEdit->toPlainText();
+             QString message = this->ui_.textEdit->serializedText();
 
              if (this->prevIndex_ != (this->prevMsg_.size() - 1) &&
                  this->prevIndex_ != this->prevMsg_.size())
@@ -877,6 +958,20 @@ bool SplitInput::eventFilter(QObject *obj, QEvent *event)
                 return false;
             }
         }
+
+        if (this->tabWheelActive_)
+        {
+            // keys go to the text edit instead of hotkeys while it's open
+            event->accept();
+            return false;
+        }
+    }
+
+    // Clicking into the text edit abandons the wheel, keeping the preview
+    if (event->type() == QEvent::MouseButtonPress && this->tabWheelActive_ &&
+        obj == this->ui_.textEdit->viewport())
+    {
+        this->finalizeTabWheel(false);
     }
 
     return BaseWidget::eventFilter(obj, event);
@@ -898,6 +993,11 @@ void SplitInput::installTextEditEvents()
                         return;
                     }
                 }
+            }
+
+            if (this->handleTabWheelKey(event))
+            {
+                return;
             }
 
             // One of the last remaining of it's kind, the copy shortcut.
@@ -1061,7 +1161,8 @@ void SplitInput::updateCompletionPopup()
 
     for (int i = std::clamp(position, 0, (int)text.length() - 1); i >= 0; i--)
     {
-        if (text[i] == ' ')
+        if (text[i] == ' ' ||
+            text[i] == QChar(QChar::ObjectReplacementCharacter))
         {
             this->hideCompletionPopup();
             return;
@@ -1160,12 +1261,14 @@ void SplitInput::insertCompletionText(const QString &input_) const
 
         if (done)
         {
+            // Replace via cursor instead of setPlainText so inline emote
+            // images elsewhere in the input survive
             auto cursor = edit.textCursor();
-            edit.setPlainText(
-                text.remove(i, position - i + 1).insert(i, input));
-
-            cursor.setPosition(i + input.size());
+            cursor.setPosition(i);
+            cursor.setPosition(position + 1, QTextCursor::KeepAnchor);
+            cursor.insertText(input, QTextCharFormat());
             edit.setTextCursor(cursor);
+            edit.tryConvertWordBeforeCursor();
             break;
         }
     }
@@ -1190,12 +1293,13 @@ bool SplitInput::isEditFirstWord() const
 
 QString SplitInput::getInputText() const
 {
-    return this->ui_.textEdit->toPlainText();
+    return this->ui_.textEdit->serializedText();
 }
 
 void SplitInput::insertText(const QString &text)
 {
     this->ui_.textEdit->insertPlainText(text);
+    this->ui_.textEdit->tryConvertWordBeforeCursor();
 }
 
 void SplitInput::hide()
@@ -1242,7 +1346,7 @@ void SplitInput::editTextChanged()
     auto *app = getApp();
 
     // set textLengthLabel value
-    QString text = this->ui_.textEdit->toPlainText();
+    QString text = this->ui_.textEdit->serializedText();
 
     if (this->shouldPreventInput(text))
     {
@@ -1277,14 +1381,21 @@ void SplitInput::editTextChanged()
         QTextCursor cursor = this->ui_.textEdit->textCursor();
         QTextCharFormat format;
 
-        cursor.setPosition(qMin(text.length(), TWITCH_MESSAGE_LIMIT),
-                           QTextCursor::MoveAnchor);
+        // Inline emote images make the serialized text longer than the
+        // document, so clamp; the overflow highlight is approximate then.
+        auto docLength = this->ui_.textEdit->document()->characterCount() - 1;
+
+        cursor.setPosition(
+            qMin(qMin(text.length(), (qsizetype)TWITCH_MESSAGE_LIMIT),
+                 (qsizetype)docLength),
+            QTextCursor::MoveAnchor);
         cursor.movePosition(QTextCursor::Start, QTextCursor::KeepAnchor);
         selections.append({cursor, format});
 
         if (text.length() > TWITCH_MESSAGE_LIMIT)
         {
-            cursor.setPosition(TWITCH_MESSAGE_LIMIT, QTextCursor::MoveAnchor);
+            cursor.setPosition(qMin(TWITCH_MESSAGE_LIMIT, (int)docLength),
+                               QTextCursor::MoveAnchor);
             cursor.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
             format.setForeground(Qt::red);
             selections.append({cursor, format});
@@ -1432,7 +1543,7 @@ void SplitInput::setReply(MessagePtr target, std::weak_ptr<Channel> channel)
     {
         // Remove old reply prefix
         auto replyPrefix = "@" + oldParent->displayName;
-        auto plainText = this->ui_.textEdit->toPlainText().trimmed();
+        auto plainText = this->ui_.textEdit->serializedText().trimmed();
         if (plainText.startsWith(replyPrefix))
         {
             plainText.remove(0, replyPrefix.length());
@@ -1462,7 +1573,7 @@ void SplitInput::setReply(MessagePtr target, std::weak_ptr<Channel> channel)
 
             // Only enable reply label if inline replying
             auto replyPrefix = "@" + this->replyTarget_->displayName;
-            auto plainText = this->ui_.textEdit->toPlainText().trimmed();
+            auto plainText = this->ui_.textEdit->serializedText().trimmed();
 
             // This makes it so if plainText contains "@StreamerFan" and
             // we are replying to "@Streamer" we don't just leave "Fan"
@@ -1857,6 +1968,402 @@ void SplitInput::setSendWaitStatus(const QString &text) const
     {
         this->ui_.sendWaitStatus->setHidden(!getSettings()->showSendWaitTimer);
     }
+}
+
+bool SplitInput::handleTabWheelKey(QKeyEvent *event)
+{
+    if (this->tabWheelActive_)
+    {
+        switch (event->key())
+        {
+            case Qt::Key_Tab:
+            case Qt::Key_Right:
+                this->cycleTabWheel(1);
+                event->accept();
+                return true;
+
+            case Qt::Key_Backtab:
+            case Qt::Key_Left:
+                this->cycleTabWheel(-1);
+                event->accept();
+                return true;
+
+            case Qt::Key_Space:
+                this->finalizeTabWheel(true);
+                event->accept();
+                return true;
+
+            case Qt::Key_Return:
+            case Qt::Key_Enter:
+                this->finalizeTabWheel(true);
+                this->handleSendMessage({});
+                event->accept();
+                return true;
+
+            case Qt::Key_Escape:
+            case Qt::Key_Backspace:
+            case Qt::Key_Delete:
+                this->cancelTabWheel();
+                event->accept();
+                return true;
+
+            case Qt::Key_Up:
+            case Qt::Key_Down:
+            case Qt::Key_Home:
+            case Qt::Key_End:
+                // Navigation away keeps the preview; the key acts normally
+                this->finalizeTabWheel(false);
+                return false;
+
+            default:
+                // printable keys keep the preview and type after it;
+                // non-printables (Shift, ...) leave the wheel open
+                if (!event->text().isEmpty() && event->text().at(0).isPrint())
+                {
+                    this->finalizeTabWheel(true);
+                }
+                return false;
+        }
+    }
+
+    if (event->key() != Qt::Key_Tab || event->modifiers() != Qt::NoModifier ||
+        !getSettings()->tabEmoteWheel || !getSettings()->inlineEmotesInInput)
+    {
+        return false;
+    }
+    if (auto *popup = this->inputCompletionPopup_.data();
+        popup != nullptr && popup->isVisible())
+    {
+        // The ':' completion popup owns Tab while it's open
+        return false;
+    }
+    if (this->openTabWheel())
+    {
+        event->accept();
+        return true;
+    }
+    return false;
+}
+
+bool SplitInput::openTabWheel()
+{
+    auto &edit = *this->ui_.textEdit;
+    auto cursor = edit.textCursor();
+    if (cursor.hasSelection())
+    {
+        return false;
+    }
+
+    const auto *doc = edit.document();
+    int end = cursor.position();
+    int start = end;
+    while (start > 0)
+    {
+        QChar ch = doc->characterAt(start - 1);
+        if (ch.isSpace() || ch == QChar::ObjectReplacementCharacter)
+        {
+            break;
+        }
+        start--;
+    }
+    if (start >= end)
+    {
+        return false;
+    }
+
+    QString word;
+    word.reserve(end - start);
+    for (int i = start; i < end; i++)
+    {
+        word.append(doc->characterAt(i));
+    }
+    // ':' words belong to the colon popup; '@' words to user completion
+    if (word.startsWith(':') || word.startsWith('@'))
+    {
+        return false;
+    }
+
+    auto channel = this->split_->getSelectedChannel();
+    if (channel == nullptr)
+    {
+        return false;
+    }
+
+    std::unique_ptr<completion::EmoteSource::EmoteStrategy> strategy;
+    if (getSettings()->useSmartEmoteCompletion)
+    {
+        strategy = std::make_unique<completion::SmartTabEmoteStrategy>();
+    }
+    else
+    {
+        strategy = std::make_unique<completion::ClassicTabEmoteStrategy>();
+    }
+    completion::EmoteSource source(channel.get(), std::move(strategy));
+    source.update(word);
+
+    std::vector<completion::EmoteItem> matches;
+    QSet<QString> seen;
+    for (const auto &item : source.output())
+    {
+        if (!item.emote || seen.contains(item.displayName))
+        {
+            continue;
+        }
+        seen.insert(item.displayName);
+        matches.push_back(item);
+        if (matches.size() >= 50)
+        {
+            break;
+        }
+    }
+    if (matches.empty())
+    {
+        // Fall through to classic tab completion (e.g. usernames)
+        return false;
+    }
+
+    if (this->tabEmoteWheel_.isNull())
+    {
+        this->tabEmoteWheel_ = new TabEmoteWheel(this);
+        this->tabEmoteWheel_->onNavigate = [this](int delta) {
+            this->cycleTabWheel(delta);
+        };
+        this->tabEmoteWheel_->onSelect = [this](int index) {
+            if (!this->tabWheelActive_)
+            {
+                return;
+            }
+            this->tabEmoteWheel_->setSelected(index);
+            this->applyTabWheelSelection();
+            this->finalizeTabWheel(true);
+        };
+    }
+
+    this->tabWheelQuery_ = word;
+    this->tabWheelActive_ = true;
+    this->hideCompletionPopup();
+
+    edit.beginInlineEmotePreview(start, end);
+    this->tabEmoteWheel_->setMatches(std::move(matches));
+    this->applyTabWheelSelection();
+
+    auto *popup = this->tabEmoteWheel_.data();
+    auto pos = this->mapToGlobal(QPoint{0, 0}) - QPoint(0, popup->height()) +
+               QPoint((this->width() - popup->width()) / 2, 0);
+    popup->move(pos);
+    popup->show();
+    return true;
+}
+
+void SplitInput::cycleTabWheel(int delta)
+{
+    if (!this->tabWheelActive_ || this->tabEmoteWheel_.isNull())
+    {
+        return;
+    }
+    auto count = static_cast<int>(this->tabEmoteWheel_->matches().size());
+    if (count == 0)
+    {
+        return;
+    }
+    auto next = ((this->tabEmoteWheel_->selected() + delta) % count + count) %
+                count;
+    this->tabEmoteWheel_->setSelected(next);
+    this->applyTabWheelSelection();
+}
+
+void SplitInput::applyTabWheelSelection()
+{
+    if (this->tabEmoteWheel_.isNull())
+    {
+        return;
+    }
+    const auto &matches = this->tabEmoteWheel_->matches();
+    auto selected = static_cast<size_t>(this->tabEmoteWheel_->selected());
+    if (selected >= matches.size())
+    {
+        return;
+    }
+    const auto &item = matches[selected];
+    this->ui_.textEdit->updateInlineEmotePreview({
+        .text = item.isEmoji ? item.emote->name.string : item.displayName,
+        .emote = item.emote,
+        .isEmoji = item.isEmoji,
+    });
+}
+
+void SplitInput::finalizeTabWheel(bool addSpace)
+{
+    if (!this->tabWheelActive_)
+    {
+        return;
+    }
+    this->tabWheelActive_ = false;
+    this->ui_.textEdit->finishInlineEmotePreview(std::nullopt, addSpace);
+    if (!this->tabEmoteWheel_.isNull())
+    {
+        this->tabEmoteWheel_->hide();
+    }
+}
+
+void SplitInput::cancelTabWheel()
+{
+    if (!this->tabWheelActive_)
+    {
+        return;
+    }
+    this->tabWheelActive_ = false;
+    this->ui_.textEdit->finishInlineEmotePreview(this->tabWheelQuery_, false);
+    if (!this->tabEmoteWheel_.isNull())
+    {
+        this->tabEmoteWheel_->hide();
+    }
+}
+
+std::optional<ResizingTextEdit::InlineEmote> SplitInput::resolveInlineEmote(
+    const QString &word) const
+{
+    if (word.length() > 2 && word.startsWith(':') && word.endsWith(':'))
+    {
+        // ":smile:" → emoji image; ":Kappa:" → the emote named Kappa
+        auto *emojis = getApp()->getEmotes()->getEmojis();
+        auto replaced = emojis->replaceShortCodes(word);
+        if (replaced != word)
+        {
+            for (const auto &part : emojis->parse(replaced))
+            {
+                if (const auto *emote = std::get_if<EmotePtr>(&part))
+                {
+                    return ResizingTextEdit::InlineEmote{
+                        .text = (*emote)->name.string,
+                        .emote = *emote,
+                        .isEmoji = true,
+                    };
+                }
+            }
+        }
+
+        auto inner = word.mid(1, word.length() - 2);
+        if (auto emote = this->lookupInlineEmote(inner))
+        {
+            return ResizingTextEdit::InlineEmote{
+                .text = inner,
+                .emote = emote,
+                .isEmoji = false,
+            };
+        }
+        return std::nullopt;
+    }
+
+    if (auto emote = this->lookupInlineEmote(word))
+    {
+        return ResizingTextEdit::InlineEmote{
+            .text = word,
+            .emote = emote,
+            .isEmoji = false,
+        };
+    }
+    return std::nullopt;
+}
+
+EmotePtr SplitInput::lookupInlineEmote(const QString &name) const
+{
+    auto *app = getApp();
+    auto channel = this->split_->getSelectedChannel();
+    if (channel == nullptr)
+    {
+        return nullptr;
+    }
+
+    EmoteName emoteName{name};
+    auto findIn = [&](const std::shared_ptr<const EmoteMap> &map) -> EmotePtr {
+        if (!map)
+        {
+            return nullptr;
+        }
+        if (auto it = map->find(emoteName); it != map->end())
+        {
+            return it->second;
+        }
+        return nullptr;
+    };
+
+    if (const auto *tc = dynamic_cast<TwitchChannel *>(channel.get()))
+    {
+        for (const auto &map :
+             app->getSeventvPersonalEmotes()->getEmoteSetsForTwitchUser(
+                 app->getAccounts()->twitch.getCurrent()->getUserId()))
+        {
+            if (auto emote = findIn(map))
+            {
+                return emote;
+            }
+        }
+        if (auto emote = tc->seventvEmote(emoteName))
+        {
+            return *emote;
+        }
+        if (auto emote = tc->bttvEmote(emoteName))
+        {
+            return *emote;
+        }
+        if (auto emote = tc->ffzEmote(emoteName))
+        {
+            return *emote;
+        }
+        if (auto emote = tc->twitchEmote(emoteName))
+        {
+            return *emote;
+        }
+        if (auto emote = findIn(tc->localTwitchEmotes()))
+        {
+            return emote;
+        }
+        if (auto emote =
+                findIn(*app->getAccounts()->twitch.getCurrent()->accessEmotes()))
+        {
+            return emote;
+        }
+    }
+
+    if (const auto *kc = dynamic_cast<KickChannel *>(channel.get()))
+    {
+        for (const auto &map :
+             app->getSeventvPersonalEmotes()->getEmoteSetsForKickUser(
+                 app->getAccounts()->kick.current()->userID()))
+        {
+            if (auto emote = findIn(map))
+            {
+                return emote;
+            }
+        }
+        if (auto emote = kc->seventvEmote(emoteName))
+        {
+            return emote;
+        }
+        if (auto emote = findIn(app->getKickChatServer()->globalEmotes()))
+        {
+            return emote;
+        }
+    }
+
+    if (channel->isTwitchOrKickChannel())
+    {
+        if (auto emote = app->getBttvEmotes()->emote(emoteName))
+        {
+            return *emote;
+        }
+        if (auto emote = app->getFfzEmotes()->emote(emoteName))
+        {
+            return *emote;
+        }
+        if (auto emote = app->getSeventvEmotes()->globalEmote(emoteName))
+        {
+            return *emote;
+        }
+    }
+
+    return nullptr;
 }
 
 void SplitInput::updateChannel()

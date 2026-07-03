@@ -6,6 +6,7 @@
 
 #include "messages/Message.hpp"
 #include "widgets/BaseWidget.hpp"
+#include "widgets/helper/ResizingTextEdit.hpp"
 
 #include <QHBoxLayout>
 #include <QLabel>
@@ -27,8 +28,9 @@ class InputCompletionPopup;
 class InputHighlighter;
 class MessageView;
 class LabelButton;
-class ResizingTextEdit;
 class ChannelView;
+class TabEmoteWheel;
+class TooltipWidget;
 class SvgButton;
 class SpellCheckHighlighter;
 class Channel;
@@ -131,6 +133,25 @@ protected:
     void hideCompletionPopup();
     void insertCompletionText(const QString &input_) const;
     void openEmotePopup();
+
+    /// Resolve a typed word to an emote/emoji that can be rendered inline
+    /// in the input box (e.g. "Kappa", ":smile:").
+    std::optional<ResizingTextEdit::InlineEmote> resolveInlineEmote(
+        const QString &word) const;
+    /// Exact-name emote lookup across this split's channel & global emotes.
+    EmotePtr lookupInlineEmote(const QString &name) const;
+
+    /// Returns true when the Tab emote wheel consumed the event.
+    bool handleTabWheelKey(QKeyEvent *event);
+    /// Returns false (classic tab completion takes over) when the word
+    /// before the cursor has no emote matches.
+    bool openTabWheel();
+    void cycleTabWheel(int delta);
+    void applyTabWheelSelection();
+    /// Close the wheel, keeping the previewed emote.
+    void finalizeTabWheel(bool addSpace);
+    /// Close the wheel, restoring the originally typed word.
+    void cancelTabWheel();
     void clearReplyTarget();
 
     void updateCancelReplyButton();
@@ -153,6 +174,11 @@ protected:
     ChannelView *const channelView_;
     QPointer<EmotePopup> emotePopup_;
     QPointer<InputCompletionPopup> inputCompletionPopup_;
+    QPointer<TabEmoteWheel> tabEmoteWheel_;
+    TooltipWidget *inputTooltip_ = nullptr;
+    bool tabWheelActive_ = false;
+    /// Restored on cancel
+    QString tabWheelQuery_;
 
     struct {
         // vbox for all components

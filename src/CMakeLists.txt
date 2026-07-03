@@ -928,6 +928,8 @@ set(SOURCE_FILES
         widgets/splits/SplitHeader.hpp
         widgets/splits/SplitInput.cpp
         widgets/splits/SplitInput.hpp
+        widgets/splits/TabEmoteWheel.cpp
+        widgets/splits/TabEmoteWheel.hpp
         widgets/splits/SplitOverlay.cpp
         widgets/splits/SplitOverlay.hpp
         )

@@ -611,6 +611,26 @@ void GeneralPage::initLayout(GeneralPageView &layout)
                             s.useSmartEmoteCompletion)
         ->addTo(layout);
 
+    SettingWidget::checkbox("Tab opens an emote wheel above the input box",
+                            s.tabEmoteWheel)
+        ->setTooltip(
+            "Pressing Tab on a partial word shows a horizontal strip of "
+            "matching emotes above the input box with a live preview in the "
+            "text. Tab/arrow keys cycle through the matches, Space/Enter "
+            "keep the selection, Escape restores the typed word. When "
+            "disabled (or when nothing matches), the classic inline tab "
+            "completion is used.")
+        ->addTo(layout);
+
+    SettingWidget::checkbox("Show emotes inline in the message input box",
+                            s.inlineEmotesInInput)
+        ->setTooltip(
+            "Render emotes and emoji as images inside the message input box "
+            "while typing. Typing an emote name followed by a space, "
+            "completing an emote, or typing :name: converts it to an image; "
+            "Backspace turns it back into text.")
+        ->addTo(layout);
+
     layout.addDropdown<float>(
         "Size", {"0.5x", "0.75x", "Default", "1.25x", "1.5x", "2x"},
         s.emoteScale,

@@ -2,6 +2,8 @@
 
 Modderino is a small fork of Chatterino7 with some quality of life additions:
 
+- inline emotes and twemojis in the typing area
+- a horizontal emote menu when tab-completing
 - emotes and twemojis in tab names
 - a mod slider for deleting, timing out and banning people easily
 - 7TV styled chat highlights
