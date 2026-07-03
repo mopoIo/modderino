@@ -7,6 +7,7 @@ Modderino is a small fork of Chatterino7 with some quality of life additions:
 - a mod slider for deleting, timing out and banning people easily
 - 7TV styled chat highlights
 - links can be dragged as text, making it easy to open one as a new browser tab
+- locked tab layout hides the close buttons from them
 - a brand new Modderino theme
 
 ![Modderino preview](.github/preview.png)
