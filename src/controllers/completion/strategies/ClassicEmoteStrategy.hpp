@@ -18,9 +18,20 @@ class ClassicEmoteStrategy : public Strategy<EmoteItem>
 
 class ClassicTabEmoteStrategy : public Strategy<EmoteItem>
 {
+public:
+    /// @param includeEmojis Match emojis even when the query doesn't start
+    /// with ':' (used by the tab emote wheel).
+    ClassicTabEmoteStrategy(bool includeEmojis = false)
+        : includeEmojis_(includeEmojis)
+    {
+    }
+
+private:
     void apply(const std::vector<EmoteItem> &items,
                std::vector<EmoteItem> &output,
                const QString &query) const override;
+
+    bool includeEmojis_;
 };
 
 }  // namespace chatterino::completion

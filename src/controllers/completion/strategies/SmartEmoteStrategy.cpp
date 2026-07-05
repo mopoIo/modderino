@@ -225,7 +225,7 @@ void SmartTabEmoteStrategy::apply(const std::vector<EmoteItem> &items,
             QStringView itemQuery;
             if (item.isEmoji)
             {
-                if (colonStart)
+                if (colonStart || this->includeEmojis_)
                 {
                     itemQuery = normalizedQuery;
                 }

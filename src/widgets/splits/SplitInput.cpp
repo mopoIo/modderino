@@ -2093,13 +2093,16 @@ bool SplitInput::openTabWheel()
     }
 
     std::unique_ptr<completion::EmoteSource::EmoteStrategy> strategy;
+    bool includeEmojis = getSettings()->tabEmoteWheelEmojis;
     if (getSettings()->useSmartEmoteCompletion)
     {
-        strategy = std::make_unique<completion::SmartTabEmoteStrategy>();
+        strategy =
+            std::make_unique<completion::SmartTabEmoteStrategy>(includeEmojis);
     }
     else
     {
-        strategy = std::make_unique<completion::ClassicTabEmoteStrategy>();
+        strategy = std::make_unique<completion::ClassicTabEmoteStrategy>(
+            includeEmojis);
     }
     completion::EmoteSource source(channel.get(), std::move(strategy));
     source.update(word);

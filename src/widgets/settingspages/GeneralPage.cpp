@@ -622,6 +622,14 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             "completion is used.")
         ->addTo(layout);
 
+    SettingWidget::checkbox("Include emojis in the Tab emote wheel",
+                            s.tabEmoteWheelEmojis)
+        ->setTooltip(
+            "Also match emojis (by shortcode) in the emote wheel that opens "
+            "when pressing Tab, ranked together with emotes just like in the "
+            "':' completion menu. Disable to only get emotes from Tab.")
+        ->addTo(layout);
+
     SettingWidget::checkbox("Show emotes inline in the message input box",
                             s.inlineEmotesInInput)
         ->setTooltip(

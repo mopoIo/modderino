@@ -387,6 +387,8 @@ public:
     BoolSetting inlineEmotesInInput = {"/behaviour/inlineEmotesInInput", true};
     BoolSetting tabEmoteWheel = {"/behaviour/autocompletion/tabEmoteWheel",
                                  true};
+    BoolSetting tabEmoteWheelEmojis = {
+        "/behaviour/autocompletion/tabEmoteWheelEmojis", false};
     BoolSetting showUsernameCompletionMenu = {
         "/behaviour/autocompletion/showUsernameCompletionMenu", true};
     BoolSetting alwaysIncludeBroadcasterInUserCompletions = {
