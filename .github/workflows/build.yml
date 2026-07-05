@@ -509,12 +509,13 @@ jobs:
           artifactErrorsFailBuild: true
           artifacts: "release-artifacts/*"
           body: ${{ steps.format-changes.outputs.changelog }}
-          prerelease: true
-          name: Modderino Nightly
-          tag: nightly-build
+          prerelease: false
+          makeLatest: true
+          name: Modderino 1.2
+          tag: v1.2
 
-      - name: Update nightly-build tag
+      - name: Update v1.2 tag
         run: |
-          git tag -f nightly-build
-          git push -f origin nightly-build
+          git tag -f v1.2
+          git push -f origin v1.2
         shell: bash
