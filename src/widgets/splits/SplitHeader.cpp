@@ -126,9 +126,8 @@ auto formatRoomModeHtml(const TwitchChannel::RoomModes &modes,
                         bool hasModRights) -> QString
 {
     const auto icon = [](const QString &path) {
-        return QStringLiteral(
-                   "<img src='%1' width='12' height='12' "
-                   "style='vertical-align: middle;'/>")
+        return QStringLiteral("<img src='%1' width='12' height='12' "
+                              "style='vertical-align: middle;'/>")
             .arg(path);
     };
     const auto grey = [](const QString &text) {
@@ -899,8 +898,8 @@ void SplitHeader::updateRoomModes()
         QString tooltip;
         {
             auto roomModes = twitchChannel->accessRoomModes();
-            html = formatRoomModeHtml(*roomModes,
-                                      twitchChannel->hasModRights());
+            html =
+                formatRoomModeHtml(*roomModes, twitchChannel->hasModRights());
             tooltip = formatRoomModeUnclean(*roomModes);
 
             // Set menu action

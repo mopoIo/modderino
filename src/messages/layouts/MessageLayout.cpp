@@ -163,9 +163,8 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
     bool hideReplies = !ctx.flags.has(MessageElementFlag::RepliedMessage);
 
     auto layoutPass = [&](qreal extraTopPadding) {
-        this->container_.beginLayout(ctx.width, this->scale_,
-                                     this->imageScale_, messageFlags,
-                                     extraTopPadding);
+        this->container_.beginLayout(ctx.width, this->scale_, this->imageScale_,
+                                     messageFlags, extraTopPadding);
 
         this->addElementsToContainer(ctx, hideModerated, hideModerationActions,
                                      hideBlockedTermAutomodMessages,
@@ -186,8 +185,8 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
             currentUserLogin());
         if (style)
         {
-            auto labelFont = getApp()->getFonts()->getFont(
-                FontStyle::ChatSmall, this->scale_);
+            auto labelFont = getApp()->getFonts()->getFont(FontStyle::ChatSmall,
+                                                           this->scale_);
             labelFont.setBold(true);
             // Measure against a pixmap so the metrics match the DPI the
             // buffer is painted at (plain metrics can differ on
@@ -198,10 +197,8 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
             // matches the label placement in updateBuffer; the label is
             // uppercase, so its glyphs end at the baseline (ascent)
             qreal labelWidth =
-                labelMetrics.horizontalAdvance(style->label) +
-                9 * this->scale_;
-            qreal labelGlyphBottom =
-                2 * this->scale_ + labelMetrics.ascent();
+                labelMetrics.horizontalAdvance(style->label) + 9 * this->scale_;
+            qreal labelGlyphBottom = 2 * this->scale_ + labelMetrics.ascent();
             QRectF labelZone(ctx.width - labelWidth, 0, labelWidth,
                              labelGlyphBottom + this->scale_);
 
@@ -217,9 +214,9 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
                         getApp()->getFonts()->getFont(FontStyle::ChatMedium,
                                                       this->scale_),
                         &fontProbe);
-                    padding -= std::max<qreal>(
-                        0, textMetrics.ascent() - textMetrics.capHeight() -
-                               2 * this->scale_);
+                    padding -= std::max<qreal>(0, textMetrics.ascent() -
+                                                      textMetrics.capHeight() -
+                                                      2 * this->scale_);
                 }
 
                 layoutPass(std::max<qreal>(0, padding));
@@ -242,10 +239,11 @@ void MessageLayout::actuallyLayout(const MessageLayoutContext &ctx)
     }
 }
 
-void MessageLayout::addElementsToContainer(
-    const MessageLayoutContext &ctx, bool hideModerated,
-    bool hideModerationActions, bool hideBlockedTermAutomodMessages,
-    bool hideSimilar, bool hideReplies)
+void MessageLayout::addElementsToContainer(const MessageLayoutContext &ctx,
+                                           bool hideModerated,
+                                           bool hideModerationActions,
+                                           bool hideBlockedTermAutomodMessages,
+                                           bool hideSimilar, bool hideReplies)
 {
     for (const auto &element : this->message_->elements)
     {
@@ -589,8 +587,7 @@ void MessageLayout::updateBuffer(QPixmap *buffer,
         int width = this->container_.getWidth();
         int height = this->container_.getHeight();
 
-        auto font =
-            getApp()->getFonts()->getFont(FontStyle::ChatSmall, scale);
+        auto font = getApp()->getFonts()->getFont(FontStyle::ChatSmall, scale);
         font.setBold(true);
         painter.setFont(font);
         painter.setPen(seventvStyle->accent);

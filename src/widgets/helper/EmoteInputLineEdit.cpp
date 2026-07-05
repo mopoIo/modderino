@@ -304,8 +304,8 @@ bool EmoteInputLineEdit::handleTabCompletion(bool forward)
     {
         this->completer_->setModel(this->channel_->completionModel);
         this->channel_->completionModel->updateResults(
-            current, this->lineEdit_->text(),
-            this->lineEdit_->cursorPosition(), this->isFirstWord());
+            current, this->lineEdit_->text(), this->lineEdit_->cursorPosition(),
+            this->isFirstWord());
         this->completionInProgress_ = true;
         this->completer_->complete();
         return true;
@@ -313,14 +313,16 @@ bool EmoteInputLineEdit::handleTabCompletion(bool forward)
 
     if (forward)
     {
-        if (!this->completer_->setCurrentRow(this->completer_->currentRow() + 1))
+        if (!this->completer_->setCurrentRow(this->completer_->currentRow() +
+                                             1))
         {
             this->completer_->setCurrentRow(0);
         }
     }
     else
     {
-        if (!this->completer_->setCurrentRow(this->completer_->currentRow() - 1))
+        if (!this->completer_->setCurrentRow(this->completer_->currentRow() -
+                                             1))
         {
             this->completer_->setCurrentRow(
                 this->completer_->completionCount() - 1);

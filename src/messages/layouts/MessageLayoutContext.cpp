@@ -168,8 +168,7 @@ std::optional<SeventvHighlightStyle> seventvHighlightStyle(
     if (flags.has(MessageFlag::FirstMessage) &&
         settings->enableFirstMessageHighlight)
     {
-        return SeventvHighlightStyle{QColor(0xc8, 0x32, 0xc8),
-                                     "FIRST MESSAGE"};
+        return SeventvHighlightStyle{QColor(0xc8, 0x32, 0xc8), "FIRST MESSAGE"};
     }
     if (flags.has(MessageFlag::Announcement) &&
         settings->enableAnnouncementHighlight)

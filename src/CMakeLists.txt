@@ -166,7 +166,7 @@ set(SOURCE_FILES
         controllers/completion/strategies/CommandStrategy.cpp
         controllers/completion/strategies/CommandStrategy.hpp
         controllers/completion/strategies/SmartEmoteStrategy.cpp
-        controllers/completion/strategies/SmartEmoteStrategy.cpp
+        controllers/completion/strategies/SmartEmoteStrategy.hpp
         controllers/completion/strategies/Strategy.hpp
         controllers/completion/TabCompletionModel.cpp
         controllers/completion/TabCompletionModel.hpp

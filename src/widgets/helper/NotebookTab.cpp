@@ -7,7 +7,6 @@
 #include "Application.hpp"
 #include "common/Channel.hpp"
 #include "common/Common.hpp"
-#include "widgets/helper/EmoteInputLineEdit.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/emotes/EmoteController.hpp"
@@ -25,6 +24,7 @@
 #include "util/EmojiText.hpp"
 #include "util/Helpers.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
+#include "widgets/helper/EmoteInputLineEdit.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/splits/DraggedSplit.hpp"
 #include "widgets/splits/Split.hpp"
@@ -492,9 +492,9 @@ int NotebookTab::normalTabWidthForHeight(int height) const
         getApp()->getFonts()->getFont(FontStyle::UiTabs, scale), this};
 
     float compactDivider = getCompactDivider(getSettings()->tabStyle);
-    qreal titleWidth =
-        emojiTextWidth(metrics, parseEmotesAndEmojis(
-                                    this->getTitle(), this->channelForEmotes()));
+    qreal titleWidth = emojiTextWidth(
+        metrics,
+        parseEmotesAndEmojis(this->getTitle(), this->channelForEmotes()));
     if (this->hasXButton())
     {
         width =
@@ -514,9 +514,9 @@ int NotebookTab::normalTabWidthForHeight(int height) const
     {
         // Only limit a tab's width by the notebook itself - a tab should
         // always show its full title unless there's truly no room for it.
-        int maxWidth = std::max(static_cast<int>(150 * scale),
-                                this->notebook_->width() -
-                                    static_cast<int>(8 * scale));
+        int maxWidth =
+            std::max(static_cast<int>(150 * scale),
+                     this->notebook_->width() - static_cast<int>(8 * scale));
         width = std::clamp(width, height, maxWidth);
     }
 

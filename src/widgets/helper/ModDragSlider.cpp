@@ -88,11 +88,9 @@ void ModDragSlider::showFor(const ChannelPtr &channel,
     this->channel_ = channel;
     this->messageId_ = message->id;
     this->login_ = message->loginName;
-    this->displayName_ = message->displayName.isEmpty()
-                             ? message->loginName
-                             : message->displayName;
-    this->canTimeout_ =
-        dynamic_cast<TwitchChannel *>(channel.get()) != nullptr;
+    this->displayName_ = message->displayName.isEmpty() ? message->loginName
+                                                        : message->displayName;
+    this->canTimeout_ = dynamic_cast<TwitchChannel *>(channel.get()) != nullptr;
     this->rowRect_ = rowRect;
 
     this->applyIdleGeometry();
@@ -129,11 +127,9 @@ void ModDragSlider::applyIdleGeometry()
         std::min<int>(this->rowRect_.height(),
                       static_cast<int>(HANDLE_HEIGHT * this->scale()) + 2);
     auto y = this->rowRect_.top() + (this->rowRect_.height() - height) / 2;
-    this->setGeometry(
-        this->rowRect_.left(),
-        y,
-        static_cast<int>(HANDLE_WIDTH * this->scale()) + 2,
-        height);
+    this->setGeometry(this->rowRect_.left(), y,
+                      static_cast<int>(HANDLE_WIDTH * this->scale()) + 2,
+                      height);
 }
 
 ModDragSlider::Zone ModDragSlider::zoneForDelta(qreal dx) const
@@ -327,9 +323,8 @@ void ModDragSlider::commit()
         break;
 
         case Zone::Timeout: {
-            sendCommand(QString("/timeout %1 %2")
-                            .arg(this->login_)
-                            .arg(seconds));
+            sendCommand(
+                QString("/timeout %1 %2").arg(this->login_).arg(seconds));
             this->startFlash(this->displayName_ + " timed out " +
                              formatTimeoutShort(seconds));
         }
@@ -408,8 +403,8 @@ void ModDragSlider::paintEvent(QPaintEvent * /*event*/)
         font.setPixelSize(static_cast<int>(10 * scale));
         painter.setFont(font);
         painter.setPen(QColor("#a3a3a3"));
-        auto textRect = this->rect().adjusted(
-            0, 0, -static_cast<int>(16 * scale), 0);
+        auto textRect =
+            this->rect().adjusted(0, 0, -static_cast<int>(16 * scale), 0);
         painter.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter,
                          this->flashText_);
         return;

@@ -790,7 +790,7 @@ void Window::onAccountSelected()
     auto user = getApp()->getAccounts()->twitch.getCurrent();
 
     // update title (also append username on Linux and MacOS)
-    QString windowTitle = "Modderino 1.1";
+    QString windowTitle = "Modderino 1.2";
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
     if (user->isAnon())

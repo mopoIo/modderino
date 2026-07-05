@@ -553,8 +553,7 @@ void SplitInput::openEmotePopup()
                         this->ui_.textEdit->document()->characterAt(
                             cursor.position() - 1);
                     if (cursor.position() > 0 && !charBefore.isSpace() &&
-                        charBefore !=
-                            QChar(QChar::ObjectReplacementCharacter))
+                        charBefore != QChar(QChar::ObjectReplacementCharacter))
                     {
                         textToInsert = " " + textToInsert;
                     }
@@ -2172,8 +2171,8 @@ void SplitInput::cycleTabWheel(int delta)
     {
         return;
     }
-    auto next = ((this->tabEmoteWheel_->selected() + delta) % count + count) %
-                count;
+    auto next =
+        ((this->tabEmoteWheel_->selected() + delta) % count + count) % count;
     this->tabEmoteWheel_->setSelected(next);
     this->applyTabWheelSelection();
 }
@@ -2325,8 +2324,8 @@ EmotePtr SplitInput::lookupInlineEmote(const QString &name) const
         {
             return emote;
         }
-        if (auto emote =
-                findIn(*app->getAccounts()->twitch.getCurrent()->accessEmotes()))
+        if (auto emote = findIn(
+                *app->getAccounts()->twitch.getCurrent()->accessEmotes()))
         {
             return emote;
         }

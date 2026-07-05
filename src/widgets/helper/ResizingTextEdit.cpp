@@ -96,10 +96,9 @@ ResizingTextEdit::ResizingTextEdit()
             }
             QTextCursor range(this->document());
             range.setPosition(position);
-            range.setPosition(
-                std::min(position + charsAdded,
-                         this->document()->characterCount() - 1),
-                QTextCursor::KeepAnchor);
+            range.setPosition(std::min(position + charsAdded,
+                                       this->document()->characterCount() - 1),
+                              QTextCursor::KeepAnchor);
             this->pendingEmojiScans_.push_back(range);
             if (!this->emojiScanQueued_)
             {
@@ -331,7 +330,8 @@ void ResizingTextEdit::convertInlineEmotesInRange(int start, int end)
             wordEnd--;
         }
         int wordStart = wordEnd;
-        while (wordStart > start && !isBoundary(doc->characterAt(wordStart - 1)))
+        while (wordStart > start &&
+               !isBoundary(doc->characterAt(wordStart - 1)))
         {
             wordStart--;
         }
@@ -372,11 +372,10 @@ bool ResizingTextEdit::tryInsertLoadedInlineEmote(QTextCursor &cursor,
                                                   const InlineEmote &emote)
 {
     auto dpr = this->devicePixelRatioF();
-    float uiScale = this->inlineEmoteScaleSource_
-                        ? this->inlineEmoteScaleSource_()
-                        : 1.0F;
-    const auto &image = emote.emote->images.getImageOrLoaded(
-        uiScale * static_cast<float>(dpr));
+    float uiScale =
+        this->inlineEmoteScaleSource_ ? this->inlineEmoteScaleSource_() : 1.0F;
+    const auto &image =
+        emote.emote->images.getImageOrLoaded(uiScale * static_cast<float>(dpr));
     if (!image || image->isEmpty())
     {
         // Nothing to load; leave the text as-is
@@ -396,8 +395,8 @@ bool ResizingTextEdit::tryInsertLoadedInlineEmote(QTextCursor &cursor,
     // Same rule the chat view uses for emotes and emojis
     // (MessageElement.cpp): intrinsic image size * UI scale * emoteScale —
     // independent of the font.
-    qreal targetHeight = image->size().height() * uiScale *
-                         getSettings()->emoteScale.getValue();
+    qreal targetHeight =
+        image->size().height() * uiScale * getSettings()->emoteScale.getValue();
 
     QPixmap scaled = pixmap->scaledToHeight(
         std::max(1, qRound(targetHeight * dpr)), Qt::SmoothTransformation);
@@ -405,8 +404,8 @@ bool ResizingTextEdit::tryInsertLoadedInlineEmote(QTextCursor &cursor,
 
     QString resource = u"c7-inline-emote:%1:%2"_s.arg(
         QString::number(scaled.height()), image->url().string);
-    this->document()->addResource(QTextDocument::ImageResource,
-                                  QUrl(resource), scaled);
+    this->document()->addResource(QTextDocument::ImageResource, QUrl(resource),
+                                  scaled);
 
     if (image->animated())
     {
@@ -617,8 +616,7 @@ void ResizingTextEdit::updateAnimatedInlineImages()
                 continue;
             }
             auto format = fragment.charFormat();
-            if (format.isImageFormat() &&
-                format.hasProperty(INLINE_EMOTE_TEXT))
+            if (format.isImageFormat() && format.hasProperty(INLINE_EMOTE_TEXT))
             {
                 inUse.insert(format.toImageFormat().name());
             }
@@ -736,9 +734,8 @@ void ResizingTextEdit::scanForEmoji()
             // swallow it into the image.
             selection.setKeepPositionOnInsert(true);
             conversions.emplace_back(
-                selection, InlineEmote{.text = glyph,
-                                       .emote = emote,
-                                       .isEmoji = true});
+                selection,
+                InlineEmote{.text = glyph, .emote = emote, .isEmoji = true});
         }
         range.endEditBlock();
         this->convertingInlineEmote_ = false;
@@ -1091,14 +1088,13 @@ void ResizingTextEdit::mouseMoveEvent(QMouseEvent *event)
     QTextEdit::mouseMoveEvent(event);
 
     QString resource;
-    auto layoutPos = event->position() +
-                     QPointF(this->horizontalScrollBar()->value(),
-                             this->verticalScrollBar()->value());
-    auto hit = this->document()->documentLayout()->hitTest(layoutPos,
-                                                           Qt::ExactHit);
-    if (hit >= 0 &&
-        this->document()->characterAt(hit) ==
-            QChar(QChar::ObjectReplacementCharacter))
+    auto layoutPos =
+        event->position() + QPointF(this->horizontalScrollBar()->value(),
+                                    this->verticalScrollBar()->value());
+    auto hit =
+        this->document()->documentLayout()->hitTest(layoutPos, Qt::ExactHit);
+    if (hit >= 0 && this->document()->characterAt(hit) ==
+                        QChar(QChar::ObjectReplacementCharacter))
     {
         QTextCursor cursor(this->document());
         cursor.setPosition(hit + 1);

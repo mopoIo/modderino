@@ -115,8 +115,8 @@ void TabEmoteWheel::updateSize()
 
     auto scale = this->scale();
     auto pad = 6 * scale;
-    auto rowWidth = 2 * (16 * scale) +
-                    this->visibleSlotCount() * (40 * scale) + 2 * pad;
+    auto rowWidth =
+        2 * (16 * scale) + this->visibleSlotCount() * (40 * scale) + 2 * pad;
 
     // with few slots the label ("name · provider · 1/1") drives the width
     auto font =
@@ -129,9 +129,9 @@ void TabEmoteWheel::updateSize()
     for (const auto &item : this->matches_)
     {
         maxLabelWidth = std::max(
-            maxLabelWidth, metrics.horizontalAdvance(item.displayName + " · " +
-                                                     item.providerName +
-                                                     " · " + counter));
+            maxLabelWidth,
+            metrics.horizontalAdvance(item.displayName + " · " +
+                                      item.providerName + " · " + counter));
     }
     maxLabelWidth =
         std::min(maxLabelWidth + 4 * pad, static_cast<qreal>(360 * scale));
@@ -150,8 +150,8 @@ void TabEmoteWheel::paintEvent(QPaintEvent * /*event*/)
     auto *theme = getTheme();
     auto scale = this->scale();
 
-    QColor borderColor = theme->isLightTheme() ? QColor("#ccc")
-                                               : QColor("#333");
+    QColor borderColor =
+        theme->isLightTheme() ? QColor("#ccc") : QColor("#333");
     painter.setBrush(theme->splits.input.background);
     painter.setPen(borderColor);
     painter.drawRoundedRect(QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5),
@@ -202,13 +202,12 @@ void TabEmoteWheel::paintEvent(QPaintEvent * /*event*/)
         {
             painter.setPen(Qt::NoPen);
             painter.setBrush(theme->tabs.selected.backgrounds.regular);
-            painter.drawRoundedRect(rect.adjusted(2 * scale, 2 * scale,
-                                                  -2 * scale, -2 * scale),
-                                    3 * scale, 3 * scale);
+            painter.drawRoundedRect(
+                rect.adjusted(2 * scale, 2 * scale, -2 * scale, -2 * scale),
+                3 * scale, 3 * scale);
         }
 
-        const auto &item =
-            this->matches_[static_cast<size_t>(matchIndex)];
+        const auto &item = this->matches_[static_cast<size_t>(matchIndex)];
         if (!item.emote)
         {
             continue;
@@ -280,10 +279,9 @@ void TabEmoteWheel::paintEvent(QPaintEvent * /*event*/)
     }
 
     auto x = (this->width() - labelWidth) / 2;
-    auto labelY = layout.pad + layout.slotSize +
-                  (layout.labelHeight + metrics.ascent() -
-                   metrics.descent()) /
-                      2;
+    auto labelY =
+        layout.pad + layout.slotSize +
+        (layout.labelHeight + metrics.ascent() - metrics.descent()) / 2;
 
     for (const auto &segment : segments)
     {

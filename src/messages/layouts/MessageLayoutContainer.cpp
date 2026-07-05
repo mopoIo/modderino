@@ -17,11 +17,10 @@
 
 #include <QDebug>
 #include <QMargins>
-
-#include <algorithm>
 #include <QPainter>
 #include <QVarLengthArray>
 
+#include <algorithm>
 #include <optional>
 
 namespace {

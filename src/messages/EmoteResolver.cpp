@@ -164,8 +164,7 @@ private:
     void save() const
     {
         QJsonObject root;
-        for (auto it = this->entries_.begin(); it != this->entries_.end();
-             ++it)
+        for (auto it = this->entries_.begin(); it != this->entries_.end(); ++it)
         {
             QJsonObject entry;
             entry["1x"] = it->url1x;

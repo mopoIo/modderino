@@ -1858,11 +1858,10 @@ void ChannelView::drawMessages(QPainter &painter, const QRect &area)
         {
             // While drag-to-moderate is active, the dragged message slides
             // right with the handle, revealing the action bar behind it.
-            const bool modDragged =
-                this->modSlider_->isDragging() &&
-                !layout->getMessagePtr()->id.isEmpty() &&
-                layout->getMessagePtr()->id ==
-                    this->modSlider_->draggedMessageId();
+            const bool modDragged = this->modSlider_->isDragging() &&
+                                    !layout->getMessagePtr()->id.isEmpty() &&
+                                    layout->getMessagePtr()->id ==
+                                        this->modSlider_->draggedMessageId();
             if (modDragged)
             {
                 painter.save();
@@ -1895,8 +1894,7 @@ void ChannelView::drawMessages(QPainter &painter, const QRect &area)
                     (msgFlags.has(MessageFlag::RecentMessage) &&
                      this->messagePreferences_.fadeMessageHistory))
                 {
-                    painter.fillRect(leftBorder,
-                                     this->messageColors_.disabled);
+                    painter.fillRect(leftBorder, this->messageColors_.disabled);
                     painter.fillRect(rightBorder,
                                      this->messageColors_.disabled);
                 }
@@ -2482,8 +2480,7 @@ void ChannelView::updateModSlider(const std::shared_ptr<MessageLayout> &layout,
 
     auto rowTop = static_cast<int>(eventPos.y() - relativePos.y());
     this->modSlider_->showFor(
-        channel, message,
-        QRect(0, rowTop, this->width(), layout->getHeight()));
+        channel, message, QRect(0, rowTop, this->width(), layout->getHeight()));
 }
 
 void ChannelView::mousePressEvent(QMouseEvent *event)

@@ -119,7 +119,6 @@ struct SeventvHighlightStyle {
 /// Returns the 7TV highlight style for @a message, or nullopt if the message
 /// isn't special or the "7TV styled highlights" setting is disabled.
 std::optional<SeventvHighlightStyle> seventvHighlightStyle(
-    const Message &message, bool ignoreHighlights,
-    const QString &currentLogin);
+    const Message &message, bool ignoreHighlights, const QString &currentLogin);
 
 }  // namespace chatterino
