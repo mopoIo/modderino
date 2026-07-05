@@ -1126,6 +1126,18 @@ void NotebookTab::paintEvent(QPaintEvent *)
         painter.drawText(textRect, this->getTitle(), option);
     }
 
+    // The title's natural width changes when emotes load in and their text
+    // turns into an image (or back) - nothing else re-measures the tab in
+    // that case, so a tab sized for "MrDestructoid" would keep its text
+    // width. Resize outside of the paint pass.
+    int desiredWidth = std::max(this->normalTabWidth(), this->growWidth_);
+    if (desiredWidth != this->width())
+    {
+        QTimer::singleShot(0, this, [this] {
+            this->updateSize();
+        });
+    }
+
     // draw close x
     if (this->shouldDrawXButton())
     {
