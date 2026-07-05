@@ -9,6 +9,7 @@
 #include "common/Common.hpp"
 #include "widgets/helper/EmoteInputLineEdit.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "controllers/emotes/EmoteController.hpp"
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
@@ -141,6 +142,16 @@ NotebookTab::NotebookTab(Notebook *notebook)
                 this->titleImagesPending_ = false;
                 this->updateSize();
             }
+            this->update();
+        });
+
+    // The account's Twitch emotes load in shortly after startup; re-parse the
+    // title then, so emote names in it become images without waiting for a
+    // hover or a chat-driven repaint
+    this->managedConnections_.managedConnect(
+        getApp()->getAccounts()->twitch.emotesReloaded,
+        [this](auto * /*caller*/, const auto & /*result*/) {
+            this->updateSize();
             this->update();
         });
 
