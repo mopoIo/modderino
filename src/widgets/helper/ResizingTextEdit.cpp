@@ -28,6 +28,7 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <ranges>
 #include <set>
 #include <utility>
 #include <variant>
@@ -141,6 +142,12 @@ ResizingTextEdit::ResizingTextEdit()
 void ResizingTextEdit::setInlineEmoteResolver(InlineEmoteResolver resolver)
 {
     this->inlineEmoteResolver_ = std::move(resolver);
+}
+
+void ResizingTextEdit::setInlineEmoteScaleSource(
+    std::function<float()> scaleSource)
+{
+    this->inlineEmoteScaleSource_ = std::move(scaleSource);
 }
 
 bool ResizingTextEdit::inlineEmotesEnabled() const
@@ -365,8 +372,11 @@ bool ResizingTextEdit::tryInsertLoadedInlineEmote(QTextCursor &cursor,
                                                   const InlineEmote &emote)
 {
     auto dpr = this->devicePixelRatioF();
-    const auto &image =
-        emote.emote->images.getImageOrLoaded(static_cast<float>(dpr));
+    float uiScale = this->inlineEmoteScaleSource_
+                        ? this->inlineEmoteScaleSource_()
+                        : 1.0F;
+    const auto &image = emote.emote->images.getImageOrLoaded(
+        uiScale * static_cast<float>(dpr));
     if (!image || image->isEmpty())
     {
         // Nothing to load; leave the text as-is
@@ -383,12 +393,11 @@ bool ResizingTextEdit::tryInsertLoadedInlineEmote(QTextCursor &cursor,
         return true;
     }
 
-    QFontMetricsF metrics(this->font());
-    qreal targetHeight = metrics.height();
-    if (!emote.isEmoji)
-    {
-        targetHeight *= 1.25;
-    }
+    // Same rule the chat view uses for emotes and emojis
+    // (MessageElement.cpp): intrinsic image size * UI scale * emoteScale —
+    // independent of the font.
+    qreal targetHeight = image->size().height() * uiScale *
+                         getSettings()->emoteScale.getValue();
 
     QPixmap scaled = pixmap->scaledToHeight(
         std::max(1, qRound(targetHeight * dpr)), Qt::SmoothTransformation);
@@ -417,12 +426,11 @@ bool ResizingTextEdit::tryInsertLoadedInlineEmote(QTextCursor &cursor,
     format.setName(resource);
     format.setWidth(logicalSize.width());
     format.setHeight(logicalSize.height());
-    // AlignBaseline: image bottom on the text's descent line, excess height
-    // above the line, none below (AlignMiddle would push half the image
-    // under the baseline). The format font is what that descent is
-    // computed from.
+    // AlignBottom: image bottom on the line's descent line, matching the
+    // chat view, which bottom-aligns emotes with the text (AlignBaseline
+    // would lift the image a full descent higher than chat).
     format.setFont(this->font());
-    format.setVerticalAlignment(QTextCharFormat::AlignBaseline);
+    format.setVerticalAlignment(QTextCharFormat::AlignBottom);
     format.setToolTip(emote.text);
     format.setProperty(INLINE_EMOTE_TEXT, emote.text);
     format.setProperty(INLINE_EMOTE_IS_EMOJI, emote.isEmoji);
@@ -723,6 +731,10 @@ void ResizingTextEdit::scanForEmoji()
             selection.setPosition(glyphStart);
             selection.setPosition(glyphStart + glyph.size(),
                                   QTextCursor::KeepAnchor);
+            // Text inserted right after the glyph (the next loop iteration)
+            // must not extend this selection, or the conversion would
+            // swallow it into the image.
+            selection.setKeepPositionOnInsert(true);
             conversions.emplace_back(
                 selection, InlineEmote{.text = glyph,
                                        .emote = emote,
@@ -739,7 +751,9 @@ void ResizingTextEdit::scanForEmoji()
             this->setTextCursor(caret);
         }
 
-        for (auto &[selection, emote] : conversions)
+        // right-to-left: replacing a glyph with an image shortens the text,
+        // which would shift selections to its right
+        for (auto &[selection, emote] : std::views::reverse(conversions))
         {
             this->insertInlineEmote(selection, emote);
         }

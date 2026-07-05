@@ -335,6 +335,9 @@ void SplitInput::initLayout()
     textEdit->setInlineEmoteResolver([this](const QString &word) {
         return this->resolveInlineEmote(word);
     });
+    textEdit->setInlineEmoteScaleSource([this] {
+        return this->scale();
+    });
 
     auto *shortcutFilter = new CmdDeleteKeyFilter(this);
     textEdit->installEventFilter(shortcutFilter);

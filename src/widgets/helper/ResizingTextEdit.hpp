@@ -41,6 +41,11 @@ public:
     /// Inline emote rendering is inactive without a resolver.
     void setInlineEmoteResolver(InlineEmoteResolver resolver);
 
+    /// Supplies the owning widget's UI scale so inline emotes are sized
+    /// exactly like the chat view (image size * scale * emoteScale).
+    /// Without a source, a scale of 1 is assumed.
+    void setInlineEmoteScaleSource(std::function<float()> scaleSource);
+
     /// The document's text with inline emote images replaced by their
     /// original text (emote name or unicode emoji).
     QString serializedText() const;
@@ -138,6 +143,7 @@ private:
     bool inlineEmotesEnabled() const;
 
     InlineEmoteResolver inlineEmoteResolver_;
+    std::function<float()> inlineEmoteScaleSource_;
 
     struct PendingInlineEmote {
         QTextCursor cursor;
