@@ -79,6 +79,15 @@ ResizingTextEdit::ResizingTextEdit()
         this->completionInProgress_ = false;
     });
 
+    // When the emoji style changes, re-bake already-typed inline emojis so they
+    // update live (like chat and tab titles) rather than only after a restart.
+    getSettings()->emojiSet.connect(
+        [this](const auto &) {
+            this->inlineEmojiRefreshRetries_ = INLINE_EMOTE_LOAD_ATTEMPTS;
+            this->refreshInlineEmojis();
+        },
+        this->managedConnections_, false);
+
     this->setFocusPolicy(Qt::ClickFocus);
     this->installEventFilter(this);
     // hover detection for inline emote tooltips
@@ -647,6 +656,112 @@ void ResizingTextEdit::updateAnimatedInlineImages()
     if (updatedAny)
     {
         this->viewport()->update();
+    }
+}
+
+void ResizingTextEdit::refreshInlineEmojis()
+{
+    auto dpr = this->devicePixelRatioF();
+    float uiScale =
+        this->inlineEmoteScaleSource_ ? this->inlineEmoteScaleSource_() : 1.0F;
+    bool updatedAny = false;
+    bool anyPending = false;
+
+    for (auto block = this->document()->begin();
+         block != this->document()->end(); block = block.next())
+    {
+        for (auto it = block.begin(); !it.atEnd(); ++it)
+        {
+            auto fragment = it.fragment();
+            if (!fragment.isValid())
+            {
+                continue;
+            }
+            auto format = fragment.charFormat();
+            // Only emojis change with the emoji style; leave real emotes alone.
+            if (!format.isImageFormat() ||
+                !format.hasProperty(INLINE_EMOTE_TEXT) ||
+                !format.boolProperty(INLINE_EMOTE_IS_EMOJI))
+            {
+                continue;
+            }
+
+            // The fragment stores the unicode glyph; re-resolve it straight
+            // from the emoji provider (the inline-emote resolver only handles
+            // shortcodes/emote names, not raw emoji). This yields the same
+            // stable EmotePtr whose image the provider just swapped in place.
+            EmotePtr emote;
+            for (const auto &part : getApp()->getEmotes()->getEmojis()->parse(
+                     format.property(INLINE_EMOTE_TEXT).toString()))
+            {
+                if (const auto *e = std::get_if<EmotePtr>(&part))
+                {
+                    emote = *e;
+                    break;
+                }
+            }
+            if (!emote)
+            {
+                continue;
+            }
+
+            const auto &image = emote->images.getImageOrLoaded(
+                uiScale * static_cast<float>(dpr));
+            if (!image || image->isEmpty())
+            {
+                continue;
+            }
+            auto pixmap = image->pixmapOrLoad();
+            if (!pixmap || pixmap->isNull())
+            {
+                // New-style image not downloaded yet; retry shortly.
+                anyPending = true;
+                continue;
+            }
+
+            // Re-bake under the fragment's existing resource name so the
+            // already-inserted image switches to the new style in place.
+            QString resource = format.toImageFormat().name();
+            qreal targetHeight = image->size().height() * uiScale *
+                                 getSettings()->emoteScale.getValue();
+            QPixmap scaled =
+                pixmap->scaledToHeight(std::max(1, qRound(targetHeight * dpr)),
+                                       Qt::SmoothTransformation);
+            scaled.setDevicePixelRatio(dpr);
+            this->document()->addResource(QTextDocument::ImageResource,
+                                          QUrl(resource), scaled);
+
+            if (image->animated())
+            {
+                this->animatedInlineImages_[resource] = {
+                    .image = image,
+                    .deviceHeight = scaled.height(),
+                };
+            }
+            else
+            {
+                this->animatedInlineImages_.erase(resource);
+            }
+            this->inlineEmoteTooltips_[resource] = {
+                .image = emote->images.getImage(3.0),
+                .text = emote->tooltip.string,
+            };
+
+            updatedAny = true;
+        }
+    }
+
+    if (updatedAny)
+    {
+        this->viewport()->update();
+    }
+
+    if (anyPending && this->inlineEmojiRefreshRetries_ > 0)
+    {
+        this->inlineEmojiRefreshRetries_--;
+        QTimer::singleShot(100, this, [this] {
+            this->refreshInlineEmojis();
+        });
     }
 }
 

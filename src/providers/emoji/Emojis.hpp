@@ -44,7 +44,10 @@ struct EmojiData {
 
     std::vector<EmojiData> variations;
 
-    EmotePtr emote;
+    // Held as a mutable pointer (not EmotePtr) so its image can be swapped in
+    // place when the emoji style changes, keeping the pointer identity stable
+    // for emojis already rendered in chat. Implicitly converts to EmotePtr.
+    std::shared_ptr<Emote> emote;
 };
 
 using EmojiPtr = std::shared_ptr<EmojiData>;
@@ -92,6 +95,11 @@ private:
     QMap<QChar, QVector<std::shared_ptr<EmojiData>>> emojiFirstByte_;
 
     bool loaded_ = false;
+
+    // False until the emoji set has been built once (during startup). Used to
+    // skip refreshing chat views on that initial build, when no views/
+    // WindowManager exist yet.
+    bool emojiSetLoaded_ = false;
 };
 
 }  // namespace chatterino

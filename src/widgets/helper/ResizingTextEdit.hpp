@@ -140,6 +140,13 @@ private:
     /// Driven by the global GIF timer.
     void updateAnimatedInlineImages();
 
+    /// Re-bake every inline emoji image in the document to the currently
+    /// selected emoji style. Called when the "Emoji style" setting changes so
+    /// already-typed emojis update live instead of only after a restart.
+    /// Retries briefly while the new-style images are still loading.
+    void refreshInlineEmojis();
+    int inlineEmojiRefreshRetries_ = 0;
+
     bool inlineEmotesEnabled() const;
 
     InlineEmoteResolver inlineEmoteResolver_;

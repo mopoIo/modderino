@@ -4,10 +4,12 @@
 
 #include "providers/emoji/Emojis.hpp"
 
+#include "Application.hpp"
 #include "common/QLogging.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
 #include "singletons/Settings.hpp"
+#include "singletons/WindowManager.hpp"
 #include "util/QCompareTransparent.hpp"
 #include "util/QMagicEnum.hpp"
 #include "util/RapidjsonHelpers.hpp"
@@ -305,13 +307,39 @@ void Emojis::loadEmojiSet()
                 urlPrefix = it->second;
             }
             QString url = urlPrefix + code + ".png";
-            emoji->emote = std::make_shared<Emote>(Emote{
-                .name = EmoteName{emoji->value},
-                .images = ImageSet{Image::fromUrl({url}, 0.35, {64, 64})},
-                .tooltip = Tooltip{":" + emoji->shortCodes[0] + ":<br/>Emoji"},
-                .homePage = Url{},
-            });
+            auto images = ImageSet{Image::fromUrl({url}, 0.35, {64, 64})};
+            if (emoji->emote)
+            {
+                // Swap the image in place so emojis already rendered in chat
+                // (which hold this exact pointer) switch to the new style on the
+                // next layout, instead of only updating after a restart.
+                emoji->emote->images = std::move(images);
+            }
+            else
+            {
+                emoji->emote = std::make_shared<Emote>(Emote{
+                    .name = EmoteName{emoji->value},
+                    .images = std::move(images),
+                    .tooltip =
+                        Tooltip{":" + emoji->shortCodes[0] + ":<br/>Emoji"},
+                    .homePage = Url{},
+                });
+            }
         }
+
+        // Re-lay-out existing chat messages so their emojis pick up the new
+        // style. Skipped on the initial build during startup, when no chat
+        // views (or WindowManager) exist yet.
+        if (this->emojiSetLoaded_)
+        {
+            auto *windows = getApp()->getWindows();
+            // Chat views: re-lay-out so message emojis pick up the new images.
+            windows->forceLayoutChannelViews();
+            // HUD surfaces that draw emojis live (tab titles, split headers)
+            // repaint on the gif signal.
+            windows->repaintGifEmotes();
+        }
+        this->emojiSetLoaded_ = true;
     });
 }
 
