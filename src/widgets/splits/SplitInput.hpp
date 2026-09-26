@@ -20,6 +20,8 @@
 
 #include <memory>
 
+class QMimeData;
+
 namespace chatterino {
 
 class Split;
@@ -246,6 +248,9 @@ protected:
     void updateFonts();
 
     bool inHistorySearch = false;
+
+private:
+    void handleImagePaste(const QMimeData *source);
 
     void startHistorySearch(bool backwards, bool loop);
     void stopHistorySearchIfNecessary();

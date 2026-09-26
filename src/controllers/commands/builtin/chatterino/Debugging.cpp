@@ -69,6 +69,16 @@ bool restartChatterino(const QProcessEnvironment &env)
     return false;
 }
 
+QString dequoteFilePath(QString filePath)
+{
+    if (filePath.startsWith('"') && filePath.endsWith('"') &&
+        filePath.length() > 2)
+    {
+        return filePath.mid(1, filePath.length() - 2);
+    }
+    return filePath;
+}
+
 QProcessEnvironment setUpEnvironmentForLogging(const QStringList &loggingRules)
 {
     static constexpr QLatin1String loggingRulesEnv("QT_LOGGING_RULES");
@@ -363,7 +373,7 @@ QString enableLogfile(const CommandContext &ctx)
         return {};
     }
 
-    QString logFilePath = ctx.words.mid(1).join(" ");
+    QString logFilePath = dequoteFilePath(ctx.words.mid(1).join(" "));
     auto result = FileLogger::instance().enable(logFilePath);
     if (result.has_value())
     {
@@ -489,7 +499,7 @@ QString seventvPresence(const CommandContext &ctx)
                 [run, reply](const auto &user) {
                     getApp()->getSeventvAPI()->getUserByTwitchID(
                         user.id,
-                        [run](const auto &obj) {
+                        [run](const auto &obj, const auto & /*raw*/) {
                             run(u"TWITCH"_s,
                                 obj["user"_L1]["id"_L1].toString());
                         },
@@ -504,16 +514,15 @@ QString seventvPresence(const CommandContext &ctx)
         }
         else if (ctx.kickChannel)
         {
-            getKickApi()->getChannelByName(userArg, [run,
-                                                     reply](const auto &res) {
+            KickApi::privateChannelInfo(userArg, [run, reply](const auto &res) {
                 if (!res)
                 {
                     reply(u"Failed to find user: " % res.error());
                     return;
                 }
                 getApp()->getSeventvAPI()->getUserByKickID(
-                    res->userID,
-                    [run](const auto &obj) {
+                    res->user.userID,
+                    [run](const auto &obj, const auto & /*raw*/) {
                         run(u"KICK"_s, obj["user"_L1]["id"_L1].toString());
                     },
                     [reply](const NetworkResult &err) {

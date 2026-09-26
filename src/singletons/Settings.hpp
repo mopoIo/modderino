@@ -6,6 +6,7 @@
 
 #include "common/ChatterinoSetting.hpp"
 #include "common/enums/MessageOverflow.hpp"
+#include "common/enums/UsernameDisplayMode.hpp"
 #include "common/LastMessageLineStyle.hpp"
 #include "common/SignalVector.hpp"
 #include "common/StreamerModeSetting.hpp"
@@ -58,12 +59,6 @@ class Modes;
 void _actuallyRegisterSetting(
     std::weak_ptr<pajlada::Settings::SettingData> setting);
 
-enum UsernameDisplayMode : int {
-    Username = 1,                  // Username
-    LocalizedName = 2,             // Localized name
-    UsernameAndLocalizedName = 3,  // Username (Localized name)
-};
-
 enum UsernameRightClickBehavior : int {
     Reply = 0,
     Mention = 1,
@@ -104,6 +99,19 @@ enum class EmoteTooltipScale : std::uint8_t {
     Huge,
 };
 
+enum class TwitchReadConnectionMode : uint8_t {
+    Authenticated,
+    Anonymous,
+    AnonymousParallel,
+};
+
+enum class KickConnectionPreference : uint8_t {
+    Default = 0,
+    Pusher = (1 << 0),
+    Centrifugo = (1 << 1),
+    Any = Pusher | Centrifugo,
+};
+
 constexpr std::optional<std::string_view> qmagicenumDisplayName(
     EmoteTooltipScale value) noexcept
 {
@@ -119,8 +127,25 @@ constexpr std::optional<std::string_view> qmagicenumDisplayName(
     }
 }
 
+constexpr std::optional<std::string_view> qmagicenumDisplayName(
+    TwitchReadConnectionMode value) noexcept
+{
+    switch (value)
+    {
+        case TwitchReadConnectionMode::Authenticated:
+            return "Authenticated (default)";
+
+        case TwitchReadConnectionMode::Anonymous:
+            return {};
+
+        case TwitchReadConnectionMode::AnonymousParallel:
+            return "Anonymous (parallel)";
+    }
+}
+
 struct SettingsArgs {
     bool isTest = false;
+    bool runMigrations = true;
 };
 
 /// Settings which are available for reading and writing on the gui thread.
@@ -163,6 +188,22 @@ public:
 
     /// Appearance
     BoolSetting showTimestamps = {"/appearance/messages/showTimestamps", true};
+    BoolSetting showHeaderTimestamps = {
+        "/appearance/messages/header/showTimestamps",
+        false,
+    };
+    BoolSetting showAnnouncementHeader = {
+        "/appearance/messages/announcements/showHeader",
+        true,
+    };
+    BoolSetting showSubscriptionHeader = {
+        "/appearance/messages/subscriptions/showHeader",
+        true,
+    };
+    BoolSetting showWatchStreakHeader = {
+        "/appearance/messages/watchstreaks/showHeader",
+        true,
+    };
     BoolSetting animationsWhenFocused = {
         "/appearance/enableAnimationsWhenFocused", false};
     BoolSetting hideMessageTimestampsWhenLive = {
@@ -184,6 +225,14 @@ public:
                                      false};
     EnumSetting<MessageOverflow> messageOverflow = {
         "/appearance/messages/messageOverflow", MessageOverflow::Highlight};
+    BoolSetting wrapAsciiArt = {
+        "/appearance/messages/wrapAsciiArt",
+        false,
+    };
+    BoolSetting showTwitchGifs = {
+        "/appearance/messages/showTwitchGifs",
+        true,
+    };
     BoolSetting separateMessages = {"/appearance/messages/separateMessages",
                                     false};
     BoolSetting fadeMessageHistory = {"/appearance/messages/fadeMessageHistory",
@@ -204,6 +253,10 @@ public:
     EnumSetting<NotebookTabVisibility> tabVisibility = {
         "/appearance/tabVisibility",
         NotebookTabVisibility::AllTabs,
+    };
+    BoolSetting growWrappedNotebookLines = {
+        "/appearance/growWrappedNotebookLines",
+        false,
     };
 
     //    BoolSetting collapseLongMessages =
@@ -318,6 +371,8 @@ public:
     };
 
     /// Behaviour
+    BoolSetting alwaysShowPinnedMessage = {"/behaviour/alwaysShowPinnedMessage",
+                                           false};
     BoolSetting allowDuplicateMessages = {"/behaviour/allowDuplicateMessages",
                                           true};
     BoolSetting mentionUsersWithAt = {"/behaviour/mentionUsersWithAt", false};
@@ -424,6 +479,14 @@ public:
     BoolSetting disableTabRenamingOnClick = {
         "/behaviour/disableTabRenamingOnClick",
         false,
+    };
+
+    IntSetting sharedChatSessionRefreshInterval = {
+        "/behaviour/sharedChatSessionRefreshInterval", 60};
+
+    BoolSetting sharedChatAlwaysShowBadge = {
+        "/behaviour/sharedChatAlwaysShowBadge",
+        true,
     };
 
     /// Emotes
@@ -765,6 +828,7 @@ public:
 
     BoolSetting loadTwitchMessageHistoryOnConnect = {
         "/misc/twitch/loadMessageHistoryOnConnect", true};
+    QStringSetting messageHistoryUrl = {"/misc/twitch/messageHistoryUrl", ""};
     IntSetting twitchMessageHistoryLimit = {
         "/misc/twitch/messageHistoryLimit",
         800,
@@ -779,6 +843,15 @@ public:
     };
     BoolSetting displaySevenTVAnimatedProfile = {
         "/misc/displaySevenTVAnimatedProfile", true};
+
+    EnumStringSetting<TwitchReadConnectionMode> twitchReadConnectionMode = {
+        "/misc/x-7tv/twitchReadConnectionMode",
+        TwitchReadConnectionMode::Authenticated};
+
+    EnumStringSetting<KickConnectionPreference> kickConnectionPreference = {
+        "/misc/x-7tv/kick/connectionPreference",
+        KickConnectionPreference::Default,
+    };
 
     EnumStringSetting<ChatSendProtocol> chatSendProtocol = {
         "/misc/chatSendProtocol", ChatSendProtocol::Default};
@@ -899,6 +972,13 @@ private:
     ChatterinoSetting<std::vector<ChannelLog>> loggedChannelsSetting = {
         "/logging/channels"};
     SignalVector<QString> mutedChannels;
+
+    IntSetting settingsVersion = {
+        "/misc/settingsVersion",
+        0,
+    };
+
+    void migrate(bool isTest);
 
 public:
     SignalVector<HighlightPhrase> highlightedMessages;

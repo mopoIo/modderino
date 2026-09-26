@@ -47,6 +47,8 @@
 
 #include <algorithm>
 
+using namespace Qt::StringLiterals;
+
 namespace chatterino {
 namespace {
 // Translates the given rectangle by an amount in the direction to appear like the tab is selected.
@@ -141,7 +143,7 @@ NotebookTab::NotebookTab(Notebook *notebook)
             if (this->titleImagesPending_)
             {
                 this->titleImagesPending_ = false;
-                this->updateSize();
+                this->refreshAndCommitSize(true);
             }
             this->update();
         });
@@ -152,13 +154,13 @@ NotebookTab::NotebookTab(Notebook *notebook)
     this->managedConnections_.managedConnect(
         getApp()->getAccounts()->twitch.emotesReloaded,
         [this](auto * /*caller*/, const auto & /*result*/) {
-            this->updateSize();
+            this->refreshAndCommitSize(true);
             this->update();
         });
 
     this->setMouseTracking(true);
 
-    this->menu_.addAction("Rename Tab", [this]() {
+    this->menu_.addAction(u"Rename Tab…"_s, this, [this]() {
         this->showRenameDialog();
     });
 
@@ -465,20 +467,7 @@ void NotebookTab::themeChangedEvent()
 
 void NotebookTab::growWidth(int width)
 {
-    if (this->growWidth_ != width)
-    {
-        this->growWidth_ = width;
-        this->updateSize();
-    }
-    else
-    {
-        this->growWidth_ = width;
-    }
-}
-
-int NotebookTab::normalTabWidth() const
-{
-    return this->normalTabWidthForHeight(this->height());
+    this->growWidth_ = width;
 }
 
 int NotebookTab::normalTabWidthForHeight(int height) const
@@ -524,22 +513,57 @@ int NotebookTab::normalTabWidthForHeight(int height) const
     return width;
 }
 
-void NotebookTab::updateSize()
+void NotebookTab::refreshAndCommitSize(bool notify)
+{
+    this->refreshSize();
+    this->commitSize(notify);
+}
+
+void NotebookTab::refreshSize()
 {
     float scale = this->scale();
     auto height = static_cast<int>(NOTEBOOK_TAB_HEIGHT * scale);
     int width = this->normalTabWidthForHeight(height);
+    this->computedMinimumSize = {width, height};
+}
 
-    if (width < this->growWidth_)
+void NotebookTab::commitSize(bool notify)
+{
+    auto size = this->computedMinimumSize;
+    if (size.width() < this->growWidth_)
     {
-        width = this->growWidth_;
+        size.setWidth(this->growWidth_);
     }
 
-    if (this->width() != width || this->height() != height)
+    if (this->size() != size)
     {
-        this->resize(width, height);
-        this->notebook_->refresh();
+        this->resize(size);
+        if (notify)
+        {
+            this->notebook_->refresh();
+        }
     }
+}
+
+QSize NotebookTab::minimumTabSize() const
+{
+    return this->computedMinimumSize;
+}
+
+int NotebookTab::minimumTabWidth() const
+{
+    return this->computedMinimumSize.width();
+}
+
+void NotebookTab::queueMove(QPoint to, bool animated)
+{
+    this->queuedMove = to;
+    this->queuedMoveAnimated = animated;
+}
+
+void NotebookTab::commitMove()
+{
+    this->moveAnimated(this->queuedMove, this->queuedMoveAnimated);
 }
 
 const QString &NotebookTab::getCustomTitle() const
@@ -603,7 +627,7 @@ void NotebookTab::titleUpdated()
     // The title may now contain emoji whose images still need loading, so allow
     // the paint loop to retry again.
     this->emojiRepaintsRemaining_ = EMOJI_LOAD_REPAINT_ATTEMPTS;
-    this->updateSize();
+    this->refreshAndCommitSize(true);
     this->update();
 }
 
@@ -919,7 +943,7 @@ QRect NotebookTab::getDesiredRect() const
 
 void NotebookTab::tabSizeChanged()
 {
-    this->updateSize();
+    this->refreshAndCommitSize(true);
     this->update();
 }
 
@@ -1128,7 +1152,7 @@ void NotebookTab::paintEvent(QPaintEvent *)
             // tab size too so wide emotes aren't clipped once they arrive.
             this->emojiRepaintsRemaining_--;
             QTimer::singleShot(50, this, [this] {
-                this->updateSize();
+                this->refreshAndCommitSize(true);
                 this->update();
             });
         }
@@ -1144,11 +1168,12 @@ void NotebookTab::paintEvent(QPaintEvent *)
     // turns into an image (or back) - nothing else re-measures the tab in
     // that case, so a tab sized for "MrDestructoid" would keep its text
     // width. Resize outside of the paint pass.
-    int desiredWidth = std::max(this->normalTabWidth(), this->growWidth_);
+    int desiredWidth = std::max(this->normalTabWidthForHeight(this->height()),
+                                this->growWidth_);
     if (desiredWidth != this->width())
     {
         QTimer::singleShot(0, this, [this] {
-            this->updateSize();
+            this->refreshAndCommitSize(true);
         });
     }
 
@@ -1416,28 +1441,7 @@ void NotebookTab::mouseMoveEvent(QMouseEvent *event)
 
 void NotebookTab::wheelEvent(QWheelEvent *event)
 {
-    const auto defaultMouseDelta = 120;
-    const auto verticalDelta = event->angleDelta().y();
-    const auto selectTab = [this](int delta) {
-        delta > 0 ? this->notebook_->selectPreviousTab()
-                  : this->notebook_->selectNextTab();
-    };
-    // If it's true
-    // Then the user uses the trackpad or perhaps the most accurate mouse
-    // Which has small delta.
-    if (std::abs(verticalDelta) < defaultMouseDelta)
-    {
-        this->mouseWheelDelta_ += verticalDelta;
-        if (std::abs(this->mouseWheelDelta_) >= defaultMouseDelta)
-        {
-            selectTab(this->mouseWheelDelta_);
-            this->mouseWheelDelta_ = 0;
-        }
-    }
-    else
-    {
-        selectTab(verticalDelta);
-    }
+    this->notebook_->scrollTabs(event);
 }
 
 void NotebookTab::update()

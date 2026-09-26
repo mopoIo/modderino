@@ -4,7 +4,6 @@
 
 #include "messages/Message.hpp"
 
-#include "Application.hpp"
 #include "common/Literals.hpp"
 #include "messages/MessageThread.hpp"
 #include "providers/colors/ColorProvider.hpp"
@@ -25,7 +24,6 @@ namespace chatterino {
 using namespace literals;
 
 Message::Message()
-    : parseTime(QTime::currentTime())
 {
     DebugCount::increase(DebugObject::Message);
 }
@@ -67,18 +65,6 @@ ScrollbarHighlight Message::getScrollBarHighlight() const
         return {
             ColorProvider::instance().color(ColorType::RedeemedHighlight),
             ScrollbarHighlight::Default,
-            true,
-        };
-    }
-
-    if (this->flags.has(MessageFlag::ElevatedMessage))
-    {
-        return {
-            ColorProvider::instance().color(
-                ColorType::ElevatedMessageHighlight),
-            ScrollbarHighlight::Default,
-            false,
-            false,
             true,
         };
     }
@@ -126,13 +112,13 @@ std::shared_ptr<Message> Message::clone() const
 {
     auto cloned = std::make_shared<Message>();
     cloned->flags = this->flags;
-    cloned->parseTime = this->parseTime;
     cloned->id = this->id;
     cloned->searchText = this->searchText;
     cloned->messageText = this->messageText;
     cloned->loginName = this->loginName;
     cloned->displayName = this->displayName;
     cloned->localizedName = this->localizedName;
+    cloned->userID = this->userID;
     cloned->timeoutUser = this->timeoutUser;
     cloned->channelName = this->channelName;
     cloned->usernameColor = this->usernameColor;
@@ -142,9 +128,10 @@ std::shared_ptr<Message> Message::clone() const
     cloned->externalBadges = this->externalBadges;
     cloned->highlightColor = this->highlightColor;
     cloned->replyThread = this->replyThread;
+    cloned->platform = this->platform;
+    cloned->replyParent = this->replyParent;
     cloned->count = this->count;
     cloned->reward = this->reward;
-    cloned->platform = this->platform;
     cloned->bits = this->bits;
     cloned->announcementColor = this->announcementColor;
     std::ranges::transform(this->elements, std::back_inserter(cloned->elements),
@@ -219,12 +206,6 @@ QJsonObject Message::toJson() const
     {
         msg["announcementColor"_L1] =
             qmagicenum::enumNameString(this->announcementColor);
-    }
-
-    // XXX: figure out if we can add this in tests
-    if (!getApp()->isTest())
-    {
-        msg["parseTime"_L1] = this->parseTime.toString(Qt::ISODate);
     }
 
     QJsonArray elements;

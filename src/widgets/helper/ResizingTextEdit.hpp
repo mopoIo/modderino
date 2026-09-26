@@ -75,6 +75,8 @@ public:
 
     bool hasHeightForWidth() const override;
     bool isFirstWord() const;
+    /// Ignore this prefix when determining the first word for completion.
+    void setIgnoredCompletionPrefix(const QString &prefix);
 
     pajlada::Signals::Signal<QKeyEvent *> keyPressed;
     pajlada::Signals::NoArgSignal focused;
@@ -190,6 +192,7 @@ private:
     bool convertingInlineEmote_ = false;
 
     QCompleter *completer_ = nullptr;
+    QString ignoredCompletionPrefix_;
     /**
      * This is true if a completion was done but the user didn't type yet,
      * and might want to press `Tab` again to get the next completion

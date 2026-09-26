@@ -44,6 +44,11 @@ public:
         return this->args_;
     }
 
+    const Modes &getModes() override
+    {
+        return this->modes_;
+    }
+
     Theme *getThemes() override
     {
         assert(
@@ -316,9 +321,9 @@ public:
     }
 
     QTemporaryDir settingsDir;
-    Modes modes_;
-    Paths paths_ = {modes_};
     Args args_;
+    Modes modes_{args_};
+    Paths paths_ = {args_, modes_};
 };
 
 }  // namespace chatterino::mock
