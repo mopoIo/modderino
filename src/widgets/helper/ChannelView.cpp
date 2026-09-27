@@ -1802,8 +1802,18 @@ void ChannelView::paintEvent(QPaintEvent *event)
         const auto textWidth = metrics.horizontalAdvance(text);
         const auto textX = pausedX * 3 + 10 * scale;
 
-        painter.fillRect(QRectF(0, 0, pausedX + textX + textWidth,
-                                indicatorSize / 2 + indicatorSize),
+        this->pausedIndicatorRect_ = QRectF(0, 0, pausedX + textX + textWidth,
+                                            indicatorSize / 2 + indicatorSize);
+
+        // Clicks already reach the messages under the sign; while it's
+        // hovered, hide it so they can be seen too. The rect stays, so moving
+        // off that corner brings it back.
+        if (this->hoveringPausedIndicator_)
+        {
+            return;
+        }
+
+        painter.fillRect(this->pausedIndicatorRect_,
                          QBrush(QColor(0, 0, 0, 200), Qt::SolidPattern));
 
         painter.fillRect(
@@ -1815,6 +1825,19 @@ void ChannelView::paintEvent(QPaintEvent *event)
         painter.setPen(color);
         painter.drawText(QRectF(textX, pausedY, textWidth, indicatorSize),
                          Qt::AlignLeft | Qt::AlignVCenter, text);
+    }
+    else
+    {
+        this->pausedIndicatorRect_ = {};
+    }
+}
+
+void ChannelView::setHoveringPausedIndicator(bool hovering)
+{
+    if (this->hoveringPausedIndicator_ != hovering)
+    {
+        this->hoveringPausedIndicator_ = hovering;
+        this->update(this->pausedIndicatorRect_.toAlignedRect());
     }
 }
 
@@ -2160,6 +2183,7 @@ void ChannelView::enterEvent(QEnterEvent * /*event*/)
 void ChannelView::leaveEvent(QEvent * /*event*/)
 {
     this->tooltipWidget_->hide();
+    this->setHoveringPausedIndicator(false);
 
     // Entering the mod slider (a child widget) also triggers leaveEvent;
     // don't hide it while the cursor is on it.
@@ -2230,6 +2254,9 @@ bool ChannelView::gestureEvent(const QGestureEvent *event)
 
 void ChannelView::mouseMoveEvent(QMouseEvent *event)
 {
+    this->setHoveringPausedIndicator(
+        this->pausedIndicatorRect_.contains(event->position()));
+
     if (this->isPanning_)
     {
         // Don't do any text selection, hovering, etc while panning

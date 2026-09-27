@@ -455,6 +455,12 @@ private:
 
     bool isScrolling_ = false;
     bool isPanning_ = false;
+
+    /// Where the "Paused" sign was last drawn, and whether the mouse is over
+    /// it. Hovering it hides it so it doesn't cover what's underneath.
+    QRectF pausedIndicatorRect_;
+    bool hoveringPausedIndicator_ = false;
+    void setHoveringPausedIndicator(bool hovering);
     QPointF lastMiddlePressPosition_;
     QPointF currentMousePosition_;
     QTimer scrollTimer_;
