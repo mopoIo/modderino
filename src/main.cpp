@@ -19,6 +19,7 @@
 #include "singletons/Updates.hpp"
 #include "util/AttachToConsole.hpp"
 #include "util/IpcQueue.hpp"
+#include "util/MonitorScaling.hpp"
 
 #ifdef Q_OS_MACOS
 #    include "util/MacOsHelpers.h"
@@ -146,6 +147,8 @@ int main(int argc, char **argv)
                               << QSslSocket::supportedProtocols();
 
         Settings settings(modes, args, paths->settingsDirectory);
+        // before any window exists, so they're all laid out for it
+        applyConsistentMonitorSize(settings);
 
         Updates updates(modes, *paths, settings);
 

@@ -27,6 +27,10 @@
 
 #include <functional>
 
+#ifdef Q_OS_WIN
+#    include "util/MonitorScaling.hpp"
+#endif
+
 #ifdef USEWINSDK
 #    include <dwmapi.h>
 #    include <shellapi.h>
@@ -803,6 +807,16 @@ void BaseWindow::closeEvent(QCloseEvent *)
 
 void BaseWindow::showEvent(QShowEvent *)
 {
+#ifdef USEWINSDK
+    // only windows people move around, not tooltips and other popups
+    if (this->monitorSizeKeeper_ == nullptr && monitorScalingActive() &&
+        this->windowHandle() != nullptr &&
+        (this->windowType() == Qt::Window || this->windowType() == Qt::Dialog))
+    {
+        this->monitorSizeKeeper_ = new MonitorSizeKeeper(this);
+    }
+#endif
+
 #ifdef Q_OS_WIN
     if (this->flags_.has(BoundsCheckOnShow))
     {
@@ -826,6 +840,12 @@ bool BaseWindow::nativeEvent(const QByteArray &eventType, void *message,
 {
 #ifdef USEWINSDK
     MSG *msg = reinterpret_cast<MSG *>(message);
+
+    if (this->monitorSizeKeeper_ != nullptr &&
+        this->monitorSizeKeeper_->nativeEvent(message, result))
+    {
+        return true;
+    }
 
     bool returnValue = false;
 

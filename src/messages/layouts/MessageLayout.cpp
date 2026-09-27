@@ -438,17 +438,23 @@ MessagePaintResult MessageLayout::paint(const MessagePaintContext &ctx)
 
 QPixmap *MessageLayout::ensureBuffer(QPainter &painter, qreal width, bool clear)
 {
+    const auto ratio = painter.device()->devicePixelRatioF();
     if (this->buffer_ != nullptr)
     {
-        return this->buffer_.get();
+        // A buffer made for another scale (the window moved to a monitor
+        // with a different one) would be stretched and blurry; make a new one
+        if (qFuzzyCompare(this->buffer_->devicePixelRatio(), ratio))
+        {
+            return this->buffer_.get();
+        }
+        this->deleteBuffer();
     }
 
     // Create new buffer
     this->buffer_ = std::make_unique<QPixmap>(
-        static_cast<int>(width * painter.device()->devicePixelRatioF()),
-        static_cast<int>(this->container_.getHeight() *
-                         painter.device()->devicePixelRatioF()));
-    this->buffer_->setDevicePixelRatio(painter.device()->devicePixelRatioF());
+        static_cast<int>(width * ratio),
+        static_cast<int>(this->container_.getHeight() * ratio));
+    this->buffer_->setDevicePixelRatio(ratio);
 
     if (clear)
     {

@@ -14,6 +14,10 @@
 #include <functional>
 
 class QHBoxLayout;
+
+namespace chatterino {
+class MonitorSizeKeeper;
+}  // namespace chatterino
 struct tagMSG;
 typedef struct tagMSG MSG;
 
@@ -230,6 +234,9 @@ private:
     /// GetWindowRect. Used for drawing.
     QRect realBounds_;
     bool isMaximized_ = false;
+    /// Keeps the window's layout the same across monitors, see
+    /// Settings::consistentMonitorSize. Owned by the window.
+    MonitorSizeKeeper *monitorSizeKeeper_ = nullptr;
 #endif
 
     pajlada::Signals::SignalHolder connections_;

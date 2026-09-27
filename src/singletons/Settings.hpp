@@ -181,6 +181,11 @@ public:
     bool shouldSendHelixChat() const;
 
     FloatSetting uiScale = {"/appearance/uiScale2", 1};
+    /// Gives each monitor a scale matching its resolution, so windows take up
+    /// the same share of every monitor. See
+    /// util/MonitorScaling.hpp
+    BoolSetting consistentMonitorSize = {"/appearance/consistentMonitorSize",
+                                         false};
     BoolSetting windowTopMost = {"/appearance/windowAlwaysOnTop", false};
 
     float getClampedUiScale() const;

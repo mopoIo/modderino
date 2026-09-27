@@ -650,6 +650,8 @@ set(SOURCE_FILES
         util/LayoutHelper.hpp
         util/LoadPixmap.cpp
         util/LoadPixmap.hpp
+        util/MonitorScaling.cpp
+        util/MonitorScaling.hpp
         util/MultiChannel.cpp
         util/MultiChannel.hpp
         util/OnceFlag.cpp

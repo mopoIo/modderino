@@ -22,6 +22,7 @@
 #include "util/FuzzyConvert.hpp"
 #include "util/Helpers.hpp"
 #include "util/IncognitoBrowser.hpp"
+#include "util/MonitorScaling.hpp"
 #include "widgets/BaseWindow.hpp"
 #include "widgets/helper/FontSettingWidget.hpp"
 #include "widgets/settingspages/GeneralPageView.hpp"
@@ -173,6 +174,37 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         [](auto args) {
             return fuzzyToFloat(args.value, 1.f);
         });
+#ifdef Q_OS_WIN
+    SettingWidget::checkbox(
+        "Keep the same size on every monitor (requires restart)",
+        s.consistentMonitorSize)
+        ->setTooltip("Windows look the same size on every monitor.")
+        ->addTo(layout);
+    // Qt's per-monitor factors only apply on start, so offer to restart -
+    // unless this run already matches (toggled and toggled back)
+    s.consistentMonitorSize.connect(
+        [this](const bool &enabled) {
+            if (enabled == monitorScalingActive())
+            {
+                return;
+            }
+            QMessageBox box(this);
+            box.setIcon(QMessageBox::Question);
+            box.setWindowTitle("Restart Modderino?");
+            box.setText("Keeping the same size on every monitor takes effect "
+                        "after restarting Modderino.");
+            auto *restartButton =
+                box.addButton("Restart now", QMessageBox::AcceptRole);
+            box.addButton("Later", QMessageBox::RejectRole);
+            box.setDefaultButton(restartButton);
+            box.exec();
+            if (box.clickedButton() == restartButton)
+            {
+                restartModderino();
+            }
+        },
+        this->managedConnections_, false);
+#endif
     ComboBox *tabDirectionDropdown =
         layout.addDropdown<std::underlying_type_t<NotebookTabLocation>>(
             "Tab layout", {"Top", "Left", "Right", "Bottom"}, s.tabDirection,
@@ -1082,7 +1114,8 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         QDesktopServices::openUrl("file://" +
                                   getApp()->getPaths().rootAppDataDirectory);
 #else
-        QDesktopServices::openUrl(getApp()->getPaths().rootAppDataDirectory);
+            QDesktopServices::openUrl(
+                getApp()->getPaths().rootAppDataDirectory);
 #endif
     });
 
