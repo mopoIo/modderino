@@ -59,8 +59,8 @@
 #include <QGuiApplication>
 #include <QMessageBox>
 #include <QPainter>
-#include <QSet>
 #include <QPushButton>
+#include <QSet>
 #include <QSignalBlocker>
 #include <qwindow.h>
 
@@ -1484,12 +1484,12 @@ void SplitInput::editTextChanged()
         // document, so clamp; the overflow highlight is approximate then.
         auto docLength = this->ui_.textEdit->document()->characterCount() - 1;
 
-        const auto limitPosition = static_cast<int>(qMin(
-            static_cast<qsizetype>(
-                textLength > TWITCH_MESSAGE_LIMIT
-                    ? codepointSlice(text, 0, TWITCH_MESSAGE_LIMIT).size()
-                    : text.length()),
-            static_cast<qsizetype>(docLength)));
+        const auto limitPosition = static_cast<int>(
+            qMin(static_cast<qsizetype>(
+                     textLength > TWITCH_MESSAGE_LIMIT
+                         ? codepointSlice(text, 0, TWITCH_MESSAGE_LIMIT).size()
+                         : text.length()),
+                 static_cast<qsizetype>(docLength)));
 
         cursor.setPosition(limitPosition, QTextCursor::MoveAnchor);
         cursor.movePosition(QTextCursor::Start, QTextCursor::KeepAnchor);
