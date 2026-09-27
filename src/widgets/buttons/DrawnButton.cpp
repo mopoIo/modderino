@@ -64,6 +64,16 @@ void DrawnButton::themeChangedEvent()
             o.foregroundHover = this->theme->messages.textColors.regular;
         }
         break;
+
+        case Symbol::ChevronDown:
+        case Symbol::ChevronUp: {
+            o.padding = 7;
+            o.thickness = 2;
+
+            o.foreground = this->theme->messages.textColors.system;
+            o.foregroundHover = this->theme->messages.textColors.regular;
+        }
+        break;
     }
 
     this->invalidateContent();
@@ -159,6 +169,32 @@ void DrawnButton::paintContent(QPainter &painter)
             // NOTE: Technically a misuse of padding
             auto topBox = centerBox.translated(0, -(thickness + padding));
             painter.fillRect(topBox, fg);
+        }
+        break;
+
+        case Symbol::ChevronDown:
+        case Symbol::ChevronUp: {
+            QPen pen(fg, thickness);
+            pen.setCapStyle(Qt::RoundCap);
+            pen.setJoinStyle(Qt::RoundJoin);
+            painter.setPen(pen);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+
+            QRectF inner = QRectF(this->rect())
+                               .marginsRemoved(QMarginsF(padding, padding,
+                                                         padding, padding));
+            // half as tall as it is wide, centered
+            qreal halfHeight = inner.width() / 4.0;
+            qreal top = inner.center().y() - halfHeight;
+            qreal bottom = inner.center().y() + halfHeight;
+            bool down = this->symbol == Symbol::ChevronDown;
+
+            QPointF points[] = {
+                {inner.left(), down ? top : bottom},
+                {inner.center().x(), down ? bottom : top},
+                {inner.right(), down ? top : bottom},
+            };
+            painter.drawPolyline(points, 3);
         }
         break;
     }

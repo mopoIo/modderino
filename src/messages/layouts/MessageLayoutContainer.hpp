@@ -161,6 +161,12 @@ struct MessageLayoutContainer {
     qreal getHeight() const;
 
     /**
+     * Returns the bottom of the first line, including the top margin, or the
+     * full height if nothing was laid out
+     */
+    qreal getFirstLineBottom() const;
+
+    /**
      * Returns the scale of this message
      */
     float getScale() const;

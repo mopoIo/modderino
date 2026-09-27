@@ -26,6 +26,7 @@
 #include <QtGlobal>
 #include <QThread>
 
+#include <cmath>
 #include <optional>
 
 namespace chatterino {
@@ -74,6 +75,11 @@ const MessagePtr &MessageLayout::getMessagePtr() const
 int MessageLayout::getHeight() const
 {
     return static_cast<int>(this->container_.getHeight());
+}
+
+int MessageLayout::getFirstLineBottom() const
+{
+    return static_cast<int>(std::ceil(this->container_.getFirstLineBottom()));
 }
 
 int MessageLayout::getWidth() const

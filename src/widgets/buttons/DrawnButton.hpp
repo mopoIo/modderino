@@ -28,6 +28,12 @@ public:
 
         /// kebab menu (3 dots underneath eachother)
         Kebab,
+
+        /// v (expand)
+        ChevronDown,
+
+        /// ^ (collapse)
+        ChevronUp,
     };
 
     struct Options {

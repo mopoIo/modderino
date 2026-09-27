@@ -436,8 +436,7 @@ void TwitchChannel::refreshFFZChannelEmotes(bool manualRefresh)
         [weak = this->weakFromThis()](auto &&emoteMap) {
             if (auto shared = weak.lock())
             {
-                shared->checkHistoryForNewEmotes(shared->ffzEmotes(),
-                                                 emoteMap);
+                shared->checkHistoryForNewEmotes(shared->ffzEmotes(), emoteMap);
                 shared->setFfzEmotes(
                     std::make_shared<const EmoteMap>(emoteMap));
             }
@@ -1624,7 +1623,8 @@ void TwitchChannel::rebuildHistoryWithEmotes()
                     continue;
                 }
                 auto existing = tc->findMessageByID(rebuilt->id);
-                if (!existing || countEmotes(*existing) == countEmotes(*rebuilt))
+                if (!existing ||
+                    countEmotes(*existing) == countEmotes(*rebuilt))
                 {
                     continue;
                 }

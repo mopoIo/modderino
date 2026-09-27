@@ -425,8 +425,8 @@ void SplitHeader::initializeLayout()
 
     this->pinButton_ = new SvgButton(
         {
-            .dark = ":/buttons/pinnedMessage-chat.svg",
-            .light = ":/buttons/pinnedMessage-chat.svg",
+            .dark = ":/buttons/pushPin.svg",
+            .light = ":/buttons/pushPin.svg",
         },
         this, {4, 4});
     this->pinButton_->setToolTip(QStringLiteral("Toggle pinned message"));
@@ -1043,6 +1043,11 @@ void SplitHeader::handleChannelChanged()
                 this->updatePinButton();
             });
 
+        this->channelConnections_.managedConnect(
+            this->split_->getPinnedBanner()->unseenUpdateChanged, [this]() {
+                this->updatePinButton();
+            });
+
         this->updatePinButton();
     }
     else
@@ -1078,6 +1083,18 @@ void SplitHeader::updatePinButton()
                                   twitchChannel->getPinnedMessage() != nullptr;
 
     this->pinButton_->setVisible(hasPinnedMessage);
+
+    // like a tab's live dot: the pin changed since the banner was last seen
+    const bool unseen =
+        hasPinnedMessage && this->split_->getPinnedBanner()->hasUnseenUpdate();
+    this->pinButton_->setIndicator(
+        unseen ? std::optional<QColor>(this->theme->tabs.liveIndicator)
+               : std::nullopt);
+    this->pinButton_->setToolTip(
+        unseen ? QStringLiteral("Pinned message updated - "
+                                "click to show it")
+               : QStringLiteral("Toggle pinned message"));
+
     if (hasPinnedMessage && this->split_->getPinnedBanner()->isVisible())
     {
         this->pinButton_->setColor(this->theme->accent);

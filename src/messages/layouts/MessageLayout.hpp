@@ -60,6 +60,8 @@ public:
     /// this is how the backing pixmap is measured - it needs whole integers.
     int getHeight() const;
     int getWidth() const;
+    /// Bottom of the first laid out line, for showing a one-line preview
+    int getFirstLineBottom() const;
 
     MessageLayoutFlags flags;
 

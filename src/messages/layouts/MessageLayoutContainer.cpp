@@ -587,6 +587,15 @@ float MessageLayoutContainer::getImageScale() const
     return this->imageScale_;
 }
 
+qreal MessageLayoutContainer::getFirstLineBottom() const
+{
+    if (this->lines_.empty())
+    {
+        return this->height_;
+    }
+    return this->lines_.front().rect.bottom();
+}
+
 bool MessageLayoutContainer::isCollapsed() const
 {
     return this->isCollapsed_;

@@ -34,6 +34,12 @@ void SvgButton::setColor(std::optional<QColor> color)
     this->invalidateContent();
 }
 
+void SvgButton::setIndicator(std::optional<QColor> color)
+{
+    this->indicator_ = color;
+    this->invalidateContent();
+}
+
 void SvgButton::setPadding(QSize padding)
 {
     if (this->padding_ == padding)
@@ -90,6 +96,21 @@ void SvgButton::paintContent(QPainter &painter)
         painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
         painter.fillRect(bounds, *this->color_);
 
+        painter.restore();
+    }
+
+    if (this->indicator_.has_value())
+    {
+        // same size and corner as the live indicator on a tab
+        const auto scale = this->scale();
+        const auto diameter = 4 * scale;
+        QRectF dot(this->width() - (7 * scale), 4 * scale, diameter, diameter);
+
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(*this->indicator_);
+        painter.drawEllipse(dot);
         painter.restore();
     }
 }

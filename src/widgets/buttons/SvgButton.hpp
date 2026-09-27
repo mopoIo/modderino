@@ -50,6 +50,12 @@ public:
     /// Set to std::nullopt to not override the color.
     void setColor(std::optional<QColor> color);
 
+    /// Draws a small dot in the top right corner, like the live indicator on
+    /// a tab, to flag something new behind the button.
+    ///
+    /// Set to std::nullopt to not draw one.
+    void setIndicator(std::optional<QColor> color);
+
     /// @brief Returns the padding inside the button.
     ///
     /// `width` is the padding applied horizontally (left and right).
@@ -77,6 +83,7 @@ private:
     QSvgRenderer *svg_;
     QSize padding_;
     std::optional<QColor> color_;
+    std::optional<QColor> indicator_;
 };
 
 }  // namespace chatterino

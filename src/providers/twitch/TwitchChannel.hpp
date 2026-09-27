@@ -463,8 +463,9 @@ private:
     /// replaces `previous`. The history is built as soon as it arrives, often
     /// before the emotes have, so if a message in it uses a name that only
     /// now became an emote, the history is rebuilt with the new emotes.
-    void checkHistoryForNewEmotes(const std::shared_ptr<const EmoteMap> &previous,
-                                  const EmoteMap &loaded);
+    void checkHistoryForNewEmotes(
+        const std::shared_ptr<const EmoteMap> &previous,
+        const EmoteMap &loaded);
     void rebuildHistoryWithEmotes();
     void cleanUpReplyThreads();
     void showLoginMessage();

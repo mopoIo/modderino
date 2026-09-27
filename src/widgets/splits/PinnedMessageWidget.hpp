@@ -11,19 +11,30 @@
 #include <QTimer>
 
 #include <memory>
+#include <optional>
 
+class QHBoxLayout;
 class QLabel;
-class QScrollArea;
 class QMenu;
 
 namespace chatterino {
 
 class TwitchChannel;
 class DrawnButton;
+class Scrollbar;
+class SvgButton;
+class PinnedMessageFade;
+class PinnedMessageView;
+struct HelixPinnedChatMessage;
 
 /**
  * Banner shown between the split header and the chat view that
  * displays the channel's currently pinned message.
+ *
+ * Collapsed, it shows who pinned it and a one-line preview of the message.
+ * Expanded, the message wraps in full and the sender's badges, name and send
+ * time appear below it. The message is laid out like a chat message, so
+ * emotes, badges, name colors and 7TV paints follow the theme and settings.
  */
 class PinnedMessageWidget final : public BaseWidget
 {
@@ -41,47 +52,66 @@ public:
     /// Emitted whenever this widget becomes shown or hidden.
     pajlada::Signals::NoArgSignal visibilityChanged;
 
+    /// Whether the pin changed while this banner wasn't on screen, and it
+    /// hasn't been shown since. Cleared as soon as it's shown.
+    bool hasUnseenUpdate() const;
+
+    /// Emitted when #hasUnseenUpdate() changes.
+    pajlada::Signals::NoArgSignal unseenUpdateChanged;
+
 protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void scaleChangedEvent(float newScale) override;
+    void themeChangedEvent() override;
     void mousePressEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
 
 private:
     void paintEvent(QPaintEvent *event) override;
     void refresh();
-    /// Builds the moderator menu shown when clicking the menu button.
-    std::unique_ptr<QMenu> buildModMenu();
+    /// Rebuilds the header, body and sender lines from the current pin.
+    void rebuildMessages(const HelixPinnedChatMessage &pin);
+    /// Builds the menu behind the kebab button. Moderator actions are only
+    /// added when the current user can unpin.
+    std::unique_ptr<QMenu> buildMenu();
+    void setExpanded(bool expanded);
     void tickProgress();
-    /// Sizes the message scroll area to its wrapped content, capped at the
-    /// (scaled) maximum height. A vertical scrollbar appears past the cap.
-    void updateMessageHeight();
-
-    /// If the scroll viewport width has changed since the last time
-    /// updateMessageHeight() was called, update the height again, because
-    /// resize events for children are delivered after resize events for
-    /// ourselves when showing the widget.
-    void updateMessageHeightIfNeeded();
+    /// Sizes the message views to the current width and the body to either
+    /// its first line (collapsed) or its full height up to a cap (expanded).
+    void updateMessageLayout();
+    /// Moves the body to the scrollbar's current position.
+    void applyBodyScroll();
 
     TwitchChannel *channel_ = nullptr;
     pajlada::Signals::SignalHolder signalHolder_;
 
     // Header row
-    QLabel *pinnedByLabel_ = nullptr;
+    QHBoxLayout *headerRow_ = nullptr;
+    QHBoxLayout *senderRow_ = nullptr;
+    SvgButton *pinIcon_ = nullptr;
+    PinnedMessageView *headerView_ = nullptr;
     QLabel *countdownLabel_ = nullptr;
-    /// Mod Menu.
     DrawnButton *menuButton_ = nullptr;
+    DrawnButton *expandButton_ = nullptr;
+    DrawnButton *collapseButton_ = nullptr;
 
-    // Body
-    QScrollArea *messageScrollArea_ = nullptr;
-    QLabel *messageLabel_ = nullptr;
-    QLabel *footerLabel_ = nullptr;
+    // Body: the message view inside a clipping viewport, scrolled by the same
+    // scrollbar the chat uses once expanded past the height cap
+    QWidget *bodyViewport_ = nullptr;
+    PinnedMessageView *bodyView_ = nullptr;
+    Scrollbar *bodyScrollbar_ = nullptr;
+    PinnedMessageFade *bodyFade_ = nullptr;
+    bool bodyScrollable_ = false;
+    bool bodyLayoutQueued_ = false;
+    PinnedMessageView *senderView_ = nullptr;
 
     QTimer *progressTimer_ = nullptr;
     QTimer *autoHideTimer_ = nullptr;
-    /// Scaled cap for the message body.
+    /// Scaled cap for the expanded message body.
     int messageMaxHeight_ = 110;
+    bool expanded_ = false;
     /// - `std::nullopt`: The user didn't toggle the widget yet.
     /// - `false`: The user hid the popup.
     /// - `true`: The user manually opened the popup.
@@ -89,7 +119,17 @@ private:
     /// Invalid when no end time.
     QDateTime pinEndsAt_;
 
-    int lastViewportWidth_ = -1;
+    /// The pin the views were last built for, and whether the original chat
+    /// message was found. A stand-in built from the pin's text is swapped for
+    /// the original once it shows up in the channel (e.g. history loading).
+    QString builtForMessageID_;
+    bool builtFromOriginal_ = false;
+
+    void setUnseenUpdate(bool unseen);
+    /// What identifies the pin as last refreshed: its message and when it
+    /// unpins. A new pin or a re-timed one differs from it.
+    QString lastPinKey_;
+    bool unseenUpdate_ = false;
 };
 
 }  // namespace chatterino

@@ -32,7 +32,7 @@ bool areClose(auto a, auto b)
 
 namespace chatterino {
 
-Scrollbar::Scrollbar(size_t messagesLimit, ChannelView *parent)
+Scrollbar::Scrollbar(size_t messagesLimit, BaseWidget *parent)
     : BaseWidget(parent)
     , currentValueAnimation_(this, "currentValue_")
     , highlights_(messagesLimit)

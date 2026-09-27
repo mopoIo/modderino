@@ -90,7 +90,7 @@ class Scrollbar : public BaseWidget
     Q_OBJECT
 
 public:
-    Scrollbar(size_t messagesLimit, ChannelView *parent);
+    Scrollbar(size_t messagesLimit, BaseWidget *parent);
 
     /// Return a copy of the highlights
     ///
