@@ -116,6 +116,7 @@ private:
     void setPixmap(const QPixmap &pixmap);
     void actuallyLoad();
     void expireFrames();
+    void scheduleRetry();
 
     const Url url_{};
     qreal scale_{1};
@@ -128,6 +129,9 @@ private:
     std::atomic_bool empty_{false};
 
     bool shouldLoad_{false};
+
+    // gui thread only: how many times loading failed with a transient error
+    uint8_t failedLoads_{0};
 
     /// Size this image should take when loaded (in both dimensions).
     ///

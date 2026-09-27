@@ -54,6 +54,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QSet>
 #include <QStringBuilder>
 #include <QThread>
 #include <QTimer>
@@ -407,6 +408,8 @@ void TwitchChannel::refreshBTTVChannelEmotes(bool manualRefresh)
         [weak = this->weakFromThis()](auto &&emoteMap) {
             if (auto shared = weak.lock())
             {
+                shared->checkHistoryForNewEmotes(shared->bttvEmotes(),
+                                                 emoteMap);
                 shared->setBttvEmotes(
                     std::make_shared<const EmoteMap>(emoteMap));
             }
@@ -433,6 +436,8 @@ void TwitchChannel::refreshFFZChannelEmotes(bool manualRefresh)
         [weak = this->weakFromThis()](auto &&emoteMap) {
             if (auto shared = weak.lock())
             {
+                shared->checkHistoryForNewEmotes(shared->ffzEmotes(),
+                                                 emoteMap);
                 shared->setFfzEmotes(
                     std::make_shared<const EmoteMap>(emoteMap));
             }
@@ -486,6 +491,8 @@ void TwitchChannel::refreshSevenTVChannelEmotes(bool manualRefresh)
                                       const auto &channelInfo) {
             if (auto shared = weak.lock())
             {
+                shared->checkHistoryForNewEmotes(shared->seventvEmotes(),
+                                                 emoteMap);
                 shared->setSeventvEmotes(
                     std::make_shared<const EmoteMap>(emoteMap));
                 shared->updateSeventvData(channelInfo.userID,
@@ -1495,6 +1502,7 @@ void TwitchChannel::loadRecentMessages()
 
             tc->addMessagesAtStart(messages);
             tc->loadingRecentMessages_.clear();
+            tc->historyLoaded_ = true;
 
             std::vector<MessagePtr> msgs;
             for (const auto &msg : messages)
@@ -1520,6 +1528,126 @@ void TwitchChannel::loadRecentMessages()
             }
 
             shared->loadingRecentMessages_.clear();
+        },
+        getSettings()->twitchMessageHistoryLimit.getValue(), std::nullopt,
+        std::nullopt, false);
+}
+
+namespace {
+
+size_t countEmotes(const Message &message)
+{
+    return std::ranges::count_if(message.elements, [](const auto &element) {
+        return dynamic_cast<const EmoteElement *>(element.get()) != nullptr ||
+               dynamic_cast<const LayeredEmoteElement *>(element.get()) !=
+                   nullptr;
+    });
+}
+
+}  // namespace
+
+void TwitchChannel::checkHistoryForNewEmotes(
+    const std::shared_ptr<const EmoteMap> &previous, const EmoteMap &loaded)
+{
+    assertInGuiThread();
+
+    if (!this->historyLoaded_ || this->historyRebuildQueued_ ||
+        !getSettings()->loadTwitchMessageHistoryOnConnect)
+    {
+        return;
+    }
+
+    QSet<QString> added;
+    for (const auto &[name, emote] : loaded)
+    {
+        if (!previous || !previous->contains(name))
+        {
+            added.insert(name.string);
+        }
+    }
+    if (added.isEmpty())
+    {
+        return;
+    }
+
+    // only refetch the history when a message in it actually uses a new emote
+    bool used = false;
+    for (const auto &message : this->getMessageSnapshot())
+    {
+        for (const auto &word :
+             QStringView(message->messageText).split(u' ', Qt::SkipEmptyParts))
+        {
+            if (added.contains(word.toString()))
+            {
+                used = true;
+                break;
+            }
+        }
+        if (used)
+        {
+            break;
+        }
+    }
+    if (!used)
+    {
+        return;
+    }
+
+    // BTTV, FFZ and 7TV usually land within moments of each other, so wait
+    // briefly and rebuild once with all of them
+    this->historyRebuildQueued_ = true;
+    QTimer::singleShot(std::chrono::seconds(1), [weak = this->weakFromThis()] {
+        if (auto shared = weak.lock())
+        {
+            shared->rebuildHistoryWithEmotes();
+        }
+    });
+}
+
+void TwitchChannel::rebuildHistoryWithEmotes()
+{
+    auto weak = this->weakFromThis();
+    recentmessages::load(
+        this->getName(), weak,
+        [weak](const auto &messages) {
+            auto tc = weak.lock();
+            if (!tc)
+            {
+                return;
+            }
+            tc->historyRebuildQueued_ = false;
+
+            for (const auto &rebuilt : messages)
+            {
+                if (rebuilt->id.isEmpty())
+                {
+                    continue;
+                }
+                auto existing = tc->findMessageByID(rebuilt->id);
+                if (!existing || countEmotes(*existing) == countEmotes(*rebuilt))
+                {
+                    continue;
+                }
+
+                // Keep what happened to the message since it was first shown:
+                // messages that arrived live aren't history, and a timeout or
+                // deletion still applies
+                if (!existing->flags.has(MessageFlag::RecentMessage))
+                {
+                    rebuilt->flags.unset(MessageFlag::RecentMessage);
+                }
+                if (existing->flags.has(MessageFlag::Disabled))
+                {
+                    rebuilt->flags.set(MessageFlag::Disabled);
+                }
+                tc->replaceMessage(existing, rebuilt);
+            }
+        },
+        [weak]() {
+            if (auto tc = weak.lock())
+            {
+                tc->historyRebuildQueued_ = false;
+            }
         },
         getSettings()->twitchMessageHistoryLimit.getValue(), std::nullopt,
         std::nullopt, false);

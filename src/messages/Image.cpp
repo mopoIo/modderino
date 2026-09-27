@@ -43,6 +43,36 @@ namespace {
 
 using namespace chatterino;
 
+// Joining a channel requests hundreds of emote images at once, and some of
+// those requests time out or get rate limited. A failed image renders as its
+// name in text, so transient failures are retried after these delays.
+constexpr std::chrono::milliseconds IMAGE_RETRY_DELAYS[] = {
+    std::chrono::seconds(2),
+    std::chrono::seconds(8),
+    std::chrono::seconds(30),
+};
+
+// Relayout once for all retries that become due in the same event-loop pass
+void queueRetryRelayout()
+{
+    static bool queued = false;
+    if (queued)
+    {
+        return;
+    }
+    queued = true;
+    QMetaObject::invokeMethod(
+        qApp,
+        [] {
+            queued = false;
+            if (auto *app = tryGetApp())
+            {
+                app->getWindows()->forceLayoutChannelViews();
+            }
+        },
+        Qt::QueuedConnection);
+}
+
 std::pair<QSize, bool> limitedAutoScaleSize(
     QSize original, std::optional<uint16_t> optAutoScale)
 {
@@ -347,6 +377,11 @@ void assignFrames(std::weak_ptr<Image> weak, QList<Frame> parsed)
         if (!shared)
         {
             return;
+        }
+        // a retry after a failed load succeeded, so stop rendering it as text
+        if (!parsed.empty())
+        {
+            shared->empty_ = false;
         }
         shared->frames_ = std::make_unique<detail::Frames>(std::move(parsed));
         if (shared->autoScale_)
@@ -728,7 +763,7 @@ void Image::actuallyLoad()
 
         assignFrames(shared, parsed);
     };
-    auto onError = [weak](const auto & /*result*/) {
+    auto onError = [weak](const NetworkResult &result) {
         auto shared = weak.lock();
         if (!shared)
         {
@@ -737,6 +772,19 @@ void Image::actuallyLoad()
 
         // fourtf: is this the right thing to do?
         shared->empty_ = true;
+
+        // No status means the request never got an answer (timeout, dropped
+        // connection). A 404 or other client error won't get better on retry.
+        auto status = result.status();
+        if (!status || *status == 429 || *status >= 500)
+        {
+            postToGuiThread([weak] {
+                if (auto shared = weak.lock())
+                {
+                    shared->scheduleRetry();
+                }
+            });
+        }
 
         return true;
     };
@@ -776,6 +824,29 @@ void Image::actuallyLoad()
             .onError(std::move(onError))
             .execute();
     }
+}
+
+void Image::scheduleRetry()
+{
+    assertInGuiThread();
+
+    if (this->failedLoads_ >= std::size(IMAGE_RETRY_DELAYS))
+    {
+        return;
+    }
+    auto delay = IMAGE_RETRY_DELAYS[this->failedLoads_];
+    this->failedLoads_++;
+
+    QTimer::singleShot(delay, [weak = this->weak_from_this()] {
+        auto shared = weak.lock();
+        if (!shared)
+        {
+            return;
+        }
+        // load() only runs while laying out an emote, so relayout to pick it up
+        shared->shouldLoad_ = true;
+        queueRetryRelayout();
+    });
 }
 
 void Image::expireFrames()
