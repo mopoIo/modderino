@@ -11,17 +11,43 @@
 #include "providers/twitch/TwitchAccount.hpp"  // IWYU pragma: keep
 #include "providers/twitch/TwitchChannel.hpp"
 #include "singletons/Fonts.hpp"
+#include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "util/Helpers.hpp"
 
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
 namespace chatterino {
 
 namespace {
+
+/// A list item runs as wide as its text, past the edge of a narrow list;
+/// fit it to the visible width so the text is elided ("…") instead
+class ElidingItemDelegate : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        QStyleOptionViewItem fitted = option;
+        if (const auto *view =
+                qobject_cast<const QAbstractItemView *>(option.widget))
+        {
+            const int right = view->viewport()->width() - 1;
+            if (fitted.rect.right() > right)
+            {
+                fitted.rect.setRight(right);
+            }
+        }
+        QStyledItemDelegate::paint(painter, fitted, index);
+    }
+};
 
 QString formatVIPListError(HelixListVIPsError error, const QString &message)
 {
@@ -165,11 +191,34 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
     auto *loadingLabel = new QLabel("Loading...");
     searchBar->setPlaceholderText("Search User...");
 
-    auto formatListItemText = [](const QString &text) {
+    // Narrow lists elide their items; hovering shows the whole text
+    for (auto *list : {chattersList, resultList})
+    {
+        list->setItemDelegate(new ElidingItemDelegate(list));
+        list->setTextElideMode(Qt::ElideRight);
+        list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    }
+
+    this->searchBar_ = searchBar;
+    this->loadingLabel_ = loadingLabel;
+    this->chattersList_ = chattersList;
+    this->resultList_ = resultList;
+
+    // follows the zoom setting, like the chat (see scaleChangedEvent)
+    auto formatListItemText = [this](const QString &text) {
         auto *item = new QListWidgetItem();
         item->setText(text);
-        item->setFont(
-            getApp()->getFonts()->getFont(FontStyle::ChatMedium, 1.0));
+        item->setToolTip(text);
+        item->setFont(getApp()->getFonts()->getFont(FontStyle::ChatMedium,
+                                                    this->scale()));
+        return item;
+    };
+
+    // Only usernames are searchable and double-clickable; headings and
+    // notices aren't users
+    auto formatUserItem = [formatListItemText](const QString &user) {
+        auto *item = formatListItemText(user);
+        item->setData(Qt::UserRole, true);
         return item;
     };
 
@@ -191,9 +240,9 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
 
         for (const auto &user : users)
         {
-            chattersList->addItem(formatListItemText(user));
+            chattersList->addItem(formatUserItem(user));
         }
-        chattersList->addItem(new QListWidgetItem());
+        chattersList->addItem(formatListItemText({}));
     };
 
     auto performListSearch = [=]() {
@@ -210,9 +259,9 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
         resultList->clear();
         for (auto &item : results)
         {
-            if (!item->text().contains("("))
+            if (item->data(Qt::UserRole).toBool())
             {
-                resultList->addItem(formatListItemText(item->text()));
+                resultList->addItem(formatUserItem(item->text()));
             }
         }
         resultList->show();
@@ -220,6 +269,7 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
 
     auto loadChatters = [twitchChannel, addLabel, chattersList, addUserList,
                          loadingLabel, performListSearch, formatListItemText,
+                         formatUserItem,
                          this](auto modList, auto vipList, bool isBroadcaster) {
         getHelix()->getChatters(
             twitchChannel->roomId(),
@@ -240,8 +290,8 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
                     {
                         addedBroadcaster = true;
                         addLabel("Broadcaster");
-                        chattersList->addItem(broadcaster);
-                        chattersList->addItem(new QListWidgetItem());
+                        chattersList->addItem(formatUserItem(broadcaster));
+                        chattersList->addItem(formatListItemText({}));
                         continue;
                     }
 
@@ -272,14 +322,14 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
                 else
                 {
                     addLabel("Moderators");
-                    chattersList->addItem(
-                        "Moderators cannot check who is a moderator");
-                    chattersList->addItem(new QListWidgetItem());
+                    chattersList->addItem(formatListItemText(
+                        "Moderators cannot check who is a moderator"));
+                    chattersList->addItem(formatListItemText({}));
 
                     addLabel("VIPs");
-                    chattersList->addItem(
-                        "Moderators cannot check who is a VIP");
-                    chattersList->addItem(new QListWidgetItem());
+                    chattersList->addItem(formatListItemText(
+                        "Moderators cannot check who is a VIP"));
+                    chattersList->addItem(formatListItemText({}));
                 }
 
                 addUserList(chatterList, QString("Chatters"));
@@ -353,12 +403,13 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
         loadingLabel->hide();
     }
 
-    this->setMinimumWidth(300);
+    this->setMinimumWidth(120);
 
     auto listDoubleClick = [this](const QModelIndex &index) {
         const auto itemText = index.data().toString();
 
-        if (!itemText.isEmpty())
+        // only usernames open a user card, not headings or notices
+        if (!itemText.isEmpty() && index.data(Qt::UserRole).toBool())
         {
             this->userClicked(itemText);
         }
@@ -391,6 +442,9 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
     getApp()->getHotkeys()->shortcutsForCategory(HotkeyCategory::PopupWindow,
                                                  actions, this);
 
+    // the search bar and label start at the current zoom too
+    this->scaleChangedEvent(this->scale());
+
     dockVbox->addWidget(searchBar);
     dockVbox->addWidget(loadingLabel);
     dockVbox->addWidget(chattersList);
@@ -399,6 +453,41 @@ ChatterListWidget::ChatterListWidget(const TwitchChannel *twitchChannel,
 
     this->setStyleSheet(this->theme->splits.input.styleSheet);
     this->setLayout(dockVbox);
+}
+
+void ChatterListWidget::resizeEvent(QResizeEvent *event)
+{
+    BaseWindow::resizeEvent(event);
+
+    // the width it's resized to is where it opens next time; sizing it
+    // before it's shown isn't the user's choice
+    if (this->isVisible())
+    {
+        getSettings()->chatterListWidth = this->width();
+    }
+}
+
+void ChatterListWidget::scaleChangedEvent(float newScale)
+{
+    BaseWindow::scaleChangedEvent(newScale);
+
+    if (this->chattersList_ == nullptr)
+    {
+        return;  // still being built
+    }
+
+    const auto font =
+        getApp()->getFonts()->getFont(FontStyle::ChatMedium, newScale);
+    this->searchBar_->setFont(font);
+    this->loadingLabel_->setFont(font);
+    for (auto *list : {this->chattersList_, this->resultList_})
+    {
+        // spacer rows too, so the gaps between sections scale with it
+        for (int i = 0; i < list->count(); i++)
+        {
+            list->item(i)->setFont(font);
+        }
+    }
 }
 
 }  // namespace chatterino

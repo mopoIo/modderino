@@ -1315,7 +1315,9 @@ void Split::openChatterList()
         return;
     }
 
-    const auto chatterListWidth = static_cast<int>(this->width() * 0.5);
+    // where the user last left it, or as wide as this chat the first time
+    const auto savedWidth = getSettings()->chatterListWidth.getValue();
+    const auto chatterListWidth = savedWidth > 0 ? savedWidth : this->width();
     const auto chatterListHeight =
         this->height() - this->header_->height() - this->input_->height();
 

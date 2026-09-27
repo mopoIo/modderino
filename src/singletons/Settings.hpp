@@ -874,6 +874,8 @@ public:
     BoolSetting informOnTabVisibilityToggle = {"/misc/askOnTabVisibilityToggle",
                                                true};
     BoolSetting lockNotebookLayout = {"/misc/lockNotebookLayout", false};
+    /// Last width the chatter list was resized to; 0 until it first is
+    IntSetting chatterListWidth = {"/misc/chatterListWidth", 0};
     BoolSetting showPronouns = {"/misc/showPronouns", false};
     BoolSetting showTitleInLiveMessage = {
         "/extraChannels/live/showTitle",
