@@ -23,6 +23,7 @@ class TwitchChannel;
 class DrawnButton;
 class Scrollbar;
 class SvgButton;
+struct Link;
 class PinnedMessageFade;
 class PinnedMessageView;
 struct HelixPinnedChatMessage;
@@ -83,6 +84,9 @@ private:
     void updateMessageLayout();
     /// Moves the body to the scrollbar's current position.
     void applyBodyScroll();
+    /// Opens what a clicked name or link points to, like the chat does: a
+    /// user card for names, the browser for URLs.
+    void openLink(const Link &link);
 
     TwitchChannel *channel_ = nullptr;
     pajlada::Signals::SignalHolder signalHolder_;

@@ -8,6 +8,7 @@
 #include "controllers/accounts/AccountController.hpp"
 #include "messages/layouts/MessageLayout.hpp"
 #include "messages/layouts/MessageLayoutContext.hpp"
+#include "messages/layouts/MessageLayoutElement.hpp"
 #include "messages/Link.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
@@ -24,16 +25,22 @@
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/Clipboard.hpp"
+#include "util/IncognitoBrowser.hpp"
 #include "widgets/buttons/DrawnButton.hpp"
 #include "widgets/buttons/SvgButton.hpp"
+#include "widgets/dialogs/UserInfoPopup.hpp"
 #include "widgets/Scrollbar.hpp"
+#include "widgets/splits/Split.hpp"
+#include "widgets/TooltipWidget.hpp"
 
 #include <IrcMessage>
 #include <QApplication>
+#include <QDesktopServices>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLinearGradient>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QShowEvent>
@@ -56,6 +63,27 @@ namespace chatterino {
 namespace {
 
 const Selection EMPTY_SELECTION;
+
+/// Same cap as the chat: past this, a stack of zero-width emotes is truncated
+constexpr size_t TOOLTIP_EMOTE_ENTRIES_LIMIT = 7;
+
+float getTooltipScale(EmoteTooltipScale emoteTooltipScale)
+{
+    switch (emoteTooltipScale)
+    {
+        case EmoteTooltipScale::Small:
+            return 0.5F;
+        case EmoteTooltipScale::Medium:
+            return 1.0F;
+        case EmoteTooltipScale::Large:
+            return 1.5F;
+        case EmoteTooltipScale::Huge:
+            return 2.0F;
+
+        default:
+            return 1.0F;
+    }
+}
 
 /// How much of the second line a collapsed preview shows, faded out, so a
 /// message that continues looks like it does.
@@ -160,6 +188,16 @@ public:
         // the pin should read at full strength, never faded as history
         this->messagePreferences_.fadeMessageHistory = false;
         this->themeChangedEvent();
+
+        // hovering emotes, badges and names works like in the chat; the
+        // hover card itself is only created once something is hovered
+        this->setMouseTracking(true);
+    }
+
+    /// Called when a link (a username, a URL) is clicked.
+    void setOnLinkClicked(std::function<void(const Link &)> callback)
+    {
+        this->onLinkClicked_ = std::move(callback);
     }
 
     void setMessage(const MessagePtr &message, MessageElementFlags flags)
@@ -293,7 +331,168 @@ protected:
         this->relayout(true);
     }
 
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        const auto *hovered = this->elementAt(event->position());
+        if (hovered == nullptr)
+        {
+            this->setCursor(Qt::ArrowCursor);
+            this->hideTooltip();
+            return;
+        }
+
+        const bool isLink = hovered->getLink().isValid();
+        this->setCursor(isLink ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        this->showTooltip(hovered->getCreator(), isLink, event);
+    }
+
+    void leaveEvent(QEvent * /*event*/) override
+    {
+        this->hideTooltip();
+        this->setCursor(Qt::ArrowCursor);
+    }
+
+    void hideEvent(QHideEvent * /*event*/) override
+    {
+        this->hideTooltip();
+    }
+
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        // taken here so the split below doesn't open its own menu
+        event->accept();
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (event->button() != Qt::LeftButton &&
+            event->button() != Qt::MiddleButton)
+        {
+            return;
+        }
+        const auto *clicked = this->elementAt(event->position());
+        if (clicked && clicked->getLink().isValid() && this->onLinkClicked_)
+        {
+            this->hideTooltip();
+            this->onLinkClicked_(clicked->getLink());
+        }
+    }
+
 private:
+    void hideTooltip()
+    {
+        if (this->tooltip_)
+        {
+            this->tooltip_->hide();
+        }
+    }
+
+    const MessageLayoutElement *elementAt(QPointF position) const
+    {
+        if (!this->layout_)
+        {
+            return nullptr;
+        }
+        // the trimmed padding is painted off-widget, so shift back into it
+        return this->layout_->getElementAt(
+            position + QPointF(this->trimLeftPx(), this->trimTopPx()));
+    }
+
+    /// The chat's hover cards: emotes and badges with their preview image,
+    /// stacked zero-width emotes, and plain tooltips for everything else.
+    void showTooltip(const MessageElement &element, bool isLink,
+                     QMouseEvent *event)
+    {
+        const auto *emoteElement = dynamic_cast<const EmoteElement *>(&element);
+        const auto *layeredEmoteElement =
+            dynamic_cast<const LayeredEmoteElement *>(&element);
+        const auto *badgeElement = dynamic_cast<const BadgeElement *>(&element);
+        const bool isNotEmote =
+            emoteElement == nullptr && layeredEmoteElement == nullptr;
+
+        if (element.getTooltip().isEmpty() ||
+            (isLink && isNotEmote && !getSettings()->linkInfoTooltip))
+        {
+            this->hideTooltip();
+            return;
+        }
+
+        if (!this->tooltip_)
+        {
+            this->tooltip_ = new TooltipWidget(this);
+        }
+
+        const auto previewMode = getSettings()->emotesTooltipPreview.getEnum();
+        const bool showThumbnail =
+            previewMode == ThumbnailPreviewMode::AlwaysShow ||
+            (previewMode == ThumbnailPreviewMode::ShowOnShift &&
+             event->modifiers() == Qt::ShiftModifier);
+        const float scale =
+            getTooltipScale(getSettings()->emoteTooltipScale.getEnum());
+
+        if (emoteElement)
+        {
+            this->tooltip_->setOne(TooltipEntry::scaled(
+                showThumbnail ? emoteElement->getEmote()->images.getImage(3.0)
+                              : nullptr,
+                element.getTooltip(), scale));
+        }
+        else if (layeredEmoteElement)
+        {
+            const auto &layers = layeredEmoteElement->getEmotes();
+            if (layers.empty())
+            {
+                this->hideTooltip();
+                return;
+            }
+            const auto &layerTooltips = layeredEmoteElement->getEmoteTooltips();
+
+            bool truncating = layers.size() > TOOLTIP_EMOTE_ENTRIES_LIMIT;
+            size_t shown =
+                truncating ? TOOLTIP_EMOTE_ENTRIES_LIMIT - 1 : layers.size();
+
+            std::vector<TooltipEntry> entries;
+            entries.reserve(shown + 1);
+            for (size_t i = 0; i < shown; ++i)
+            {
+                const auto &emote = layers[i].ptr;
+                // the base emote gets a large image and its full description,
+                // the zero-width ones a small image and their name
+                entries.push_back(TooltipEntry::scaled(
+                    showThumbnail ? emote->images.getImage(i == 0 ? 3.0 : 1.0)
+                                  : nullptr,
+                    i == 0 ? layerTooltips[i] : emote->name.string, scale));
+            }
+            if (truncating)
+            {
+                entries.push_back({nullptr, "..."});
+            }
+            this->tooltip_->set(entries, layers.size() > 2
+                                             ? TooltipStyle::Grid
+                                             : TooltipStyle::Vertical);
+        }
+        else if (badgeElement)
+        {
+            this->tooltip_->setOne(TooltipEntry::scaled(
+                showThumbnail ? badgeElement->getEmote()->images.getImage(3.0)
+                              : nullptr,
+                element.getTooltip(), scale));
+        }
+        else
+        {
+            this->tooltip_->setOne(TooltipEntry{
+                .image = nullptr,
+                .text = element.getTooltip(),
+            });
+        }
+
+        this->tooltip_->moveTo(
+            event->globalPosition().toPoint() + QPoint(16, 16),
+            widgets::BoundsChecking::CursorPosition);
+        this->tooltip_->setWordWrap(isLink);
+        this->tooltip_->show();
+    }
+
     float layoutScale() const
     {
         return this->scale() * this->scaleFactor_;
@@ -371,6 +570,8 @@ private:
     int peek_ = 0;
     bool hasAnimatedElements_ = false;
     std::function<void()> onHeightChanged_;
+    std::function<void(const Link &)> onLinkClicked_;
+    TooltipWidget *tooltip_ = nullptr;
 };
 
 /// Fades the scrolled message into the banner background at the edges where
@@ -572,9 +773,62 @@ PinnedMessageWidget::PinnedMessageWidget(QWidget *parent)
         }
     });
 
+    for (auto *view : {this->headerView_, this->bodyView_, this->senderView_})
+    {
+        view->setOnLinkClicked([this](const Link &link) {
+            this->openLink(link);
+        });
+    }
+
     this->scaleChangedEvent(this->scale());
     this->themeChangedEvent();
     this->hide();
+}
+
+void PinnedMessageWidget::openLink(const Link &link)
+{
+    switch (link.type)
+    {
+        case Link::UserWhisper:
+        case Link::UserInfo: {
+            Split *split = nullptr;
+            for (auto *widget = this->parentWidget(); widget && !split;
+                 widget = widget->parentWidget())
+            {
+                split = dynamic_cast<Split *>(widget);
+            }
+            if (!split || !this->channel_)
+            {
+                return;
+            }
+
+            auto *userPopup =
+                new UserInfoPopup(getSettings()->autoCloseUserPopup, split);
+            auto channel = this->channel_->sharedFromThis();
+            userPopup->setData(link.value, channel, channel);
+
+            QPoint offset(userPopup->width() / 3, userPopup->height() / 5);
+            userPopup->moveTo(QCursor::pos() - offset,
+                              widgets::BoundsChecking::CursorPosition);
+            userPopup->show();
+        }
+        break;
+
+        case Link::Url: {
+            if (getSettings()->openLinksIncognito && supportsIncognitoLinks())
+            {
+                openLinkIncognito(link.value);
+            }
+            else
+            {
+                QDesktopServices::openUrl(QUrl(link.value));
+            }
+        }
+        break;
+
+        default:
+            break;
+    }
 }
 
 void PinnedMessageWidget::tickProgress()
@@ -772,9 +1026,12 @@ void PinnedMessageWidget::rebuildMessages(const HelixPinnedChatMessage &pin)
             }
         }
 
-        header->elements.push_back(std::make_unique<TextElement>(
+        auto pinner = std::make_unique<TextElement>(
             pin.pinnedBy.formatted(mode), MessageElementFlag::Text,
-            MessageColor::System, FontStyle::ChatMedium));
+            MessageColor::System, FontStyle::ChatMedium);
+        // clickable for their user card; stays grey, like system text
+        pinner->setLink({Link::UserInfo, pin.pinnedBy.login});
+        header->elements.push_back(std::move(pinner));
 
         this->headerView_->setMessage(
             header, {MessageElementFlag::Text,
